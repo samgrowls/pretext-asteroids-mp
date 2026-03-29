@@ -120,13 +120,13 @@
   </div>
 
   <script type="module">
-    // Inline the game code since we can't bundle in this setup
-    import geckos from 'https://cdn.jsdelivr.net/npm/@geckos.io/client@3.1.0/+esm'
-    
+    // Inline the game code - uses esm.sh for reliable browser ES modules
+    import geckos from 'https://esm.sh/@geckos.io/client@3.1.0'
+
     const WORLD_SIZE = 4000
     const SHIP_SIZE = 24
     const SHIP_COLLISION_RADIUS = 10
-    
+
     // Connection
     const connection = geckos()
     let playerId = null
