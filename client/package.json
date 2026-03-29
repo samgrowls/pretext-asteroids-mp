@@ -1,0 +1,17 @@
+{
+  "name": "@asteroids/client",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "build": "mkdir -p dist && cp index.html dist/ && bun build src/index.ts --outdir dist --minify",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@asteroids/shared": "workspace:*",
+    "@geckos.io/client": "^3.1.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}
