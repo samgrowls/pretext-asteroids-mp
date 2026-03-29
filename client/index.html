@@ -76,6 +76,59 @@
     const SHIP_COLLISION_RADIUS = 10
     const ASTEROID_GLYPHS = '▓▒░█▀▄■●◐◑◒◓⬡⬢◆◇○●'
 
+    // --- Asteroid Canvas Cache ---
+    const asteroidCanvasCache = new Map()
+    
+    function getAsteroidCanvas(asteroid) {
+      const key = `${asteroid.size}-${asteroid.id}`
+      if (asteroidCanvasCache.has(key)) return asteroidCanvasCache.get(key)
+      
+      const radius = asteroid.radius
+      const dim = (radius + 2) * 2
+      const canvas = document.createElement('canvas')
+      canvas.width = dim
+      canvas.height = dim
+      const ctx = canvas.getContext('2d')
+      
+      const centerX = radius + 2
+      const centerY = radius + 2
+      const density = asteroid.size === 'large' ? 9 : asteroid.size === 'medium' ? 7 : 5
+      const fontSize = asteroid.size === 'large' ? 13 : asteroid.size === 'medium' ? 10 : 8
+      
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      
+      // Render glyphs at vertex positions
+      for (const vertex of asteroid.vertices) {
+        const glyphIndex = Math.floor((Math.abs(vertex.x) + Math.abs(vertex.y)) % ASTEROID_GLYPHS.length)
+        const glyph = ASTEROID_GLYPHS[glyphIndex]
+        const shadeIndex = ASTEROID_GLYPHS.indexOf(glyph)
+        const lightness = 55 + ((shadeIndex >= 0 ? shadeIndex : 0) % 5) * 7
+        ctx.fillStyle = `hsl(0, 0%, ${lightness}%)`
+        ctx.font = `bold ${fontSize}px "Courier New", monospace`
+        ctx.fillText(glyph, centerX + vertex.x, centerY + vertex.y)
+      }
+      
+      // Also fill interior with sparse glyphs
+      for (let y = -radius + density; y < radius; y += density) {
+        for (let x = -radius + density; x < radius; x += density) {
+          if (x * x + y * y < radius * radius * 0.85) {
+            const glyphIndex = Math.floor((Math.abs(x) + Math.abs(y) + radius) % ASTEROID_GLYPHS.length)
+            const glyph = ASTEROID_GLYPHS[glyphIndex]
+            const shadeIndex = ASTEROID_GLYPHS.indexOf(glyph)
+            const lightness = 50 + ((shadeIndex >= 0 ? shadeIndex : 0) % 6) * 7
+            ctx.globalAlpha = 0.7
+            ctx.fillStyle = `hsl(0, 0%, ${lightness}%)`
+            ctx.font = `bold ${fontSize}px "Courier New", monospace`
+            ctx.fillText(glyph, centerX + x, centerY + y)
+          }
+        }
+      }
+      
+      asteroidCanvasCache.set(key, canvas)
+      return canvas
+    }
+
     // --- Socket.io Connection ---
     const socket = io()
     let playerId = null
@@ -231,31 +284,14 @@
 
       ctx.save()
       ctx.translate(screenX, screenY)
+      ctx.rotate(asteroid.rotation)
       
-      const density = asteroid.size === 'large' ? 10 : asteroid.size === 'medium' ? 8 : 6
-      const fontSize = asteroid.size === 'large' ? 13 : asteroid.size === 'medium' ? 10 : 8
-      const radius = asteroid.radius
-      
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-      ctx.globalAlpha = asteroid.size === 'large' ? 0.9 : asteroid.size === 'medium' ? 0.8 : 0.7
+      const canvas = getAsteroidCanvas(asteroid)
+      const dim = canvas.width / (window.devicePixelRatio || 1)
+      const offset = dim / 2
+      ctx.drawImage(canvas, -offset, -offset)
 
-      // Render glyphs in a grid pattern within the asteroid radius
-      for (let y = -radius + density; y < radius; y += density) {
-        for (let x = -radius + density; x < radius; x += density) {
-          // Check if this point is inside the asteroid (approximate circle check)
-          if (x * x + y * y < radius * radius * 0.9) {
-            const glyphIndex = Math.floor((Math.abs(x) + Math.abs(y) + radius) % ASTEROID_GLYPHS.length)
-            const glyph = ASTEROID_GLYPHS[glyphIndex]
-            const shadeIndex = ASTEROID_GLYPHS.indexOf(glyph)
-            const lightness = 50 + ((shadeIndex >= 0 ? shadeIndex : 0) % 6) * 7
-            ctx.fillStyle = `hsl(0, 0%, ${lightness}%)`
-            ctx.font = `bold ${fontSize}px "Courier New", monospace`
-            ctx.fillText(glyph, x, y)
-          }
-        }
-      }
-
-      ctx.globalAlpha = 1; ctx.restore()
+      ctx.restore()
     }
 
     function renderShip(ship, isLocal) {
