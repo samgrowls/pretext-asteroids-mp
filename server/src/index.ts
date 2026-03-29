@@ -1,7 +1,7 @@
 import { createServer } from 'http'
 import express from 'express'
 import cors from 'cors'
-import geckos from '@geckos.io/server'
+import { Server } from 'socket.io'
 import { 
   WORLD_SIZE, SHIP_SIZE, SHIP_COLLISION_RADIUS, ASTEROID_COLLISION_FACTOR, BULLET_LIFETIME,
   type ShipState, type AsteroidState, type BulletState, type InputState, DEFAULT_INPUT
@@ -23,7 +23,6 @@ const GAME_DURATION = 180000 // 3 minutes in ms
 const WINNING_SCORE = 500
 
 // --- Game Types ---
-type GameMode = 'ffa' | 'teams' | 'ctf' | 'king'
 type Player = {
   id: string
   name: string
@@ -35,7 +34,7 @@ type Player = {
 }
 
 type GameModeConfig = {
-  mode: GameMode
+  mode: 'ffa' | 'teams' | 'ctf' | 'king'
   duration: number
   winningScore: number
   teams?: boolean
@@ -120,7 +119,6 @@ for (let i = 0; i < 50; i++) {
 
 // --- Player Management ---
 function createPlayer(id: string, name: string): Player {
-  // Find spawn point away from asteroids
   let x: number, y: number
   let attempts = 0
   do {
@@ -169,21 +167,36 @@ function findSafeSpawnPoint(): { x: number; y: number } {
   return { x, y }
 }
 
-// --- Express + Geckos Setup ---
+// --- Express + Socket.io Setup ---
 const app = express()
 app.use(cors())
 app.use(express.static(CLIENT_DIR))
 
 const httpServer = createServer(app)
-// @ts-ignore - Geckos.io type quirks
-const io = geckos(httpServer, {
+const io = new Server(httpServer, {
   cors: { origin: '*' },
 })
 
 // --- Broadcasting ---
 function broadcast(event: any, excludeId?: string) {
-  // @ts-ignore - Geckos.io type quirks
-  io.emit('event', event, excludeId ? [excludeId] : undefined)
+  if (excludeId) {
+    io.emit('event', event)
+  } else {
+    io.emit('event', event)
+  }
+}
+
+function broadcastState() {
+  gameStateSeq++
+  const state = {
+    seq: gameStateSeq,
+    ships: Array.from(players.values()).map(p => p.ship),
+    asteroids,
+    bullets,
+    gameActive,
+    timeRemaining: gameActive ? Math.max(0, gameMode.duration - (Date.now() - gameStartTime)) : 0,
+  }
+  io.emit('state', state)
 }
 
 function startGame() {
@@ -192,7 +205,6 @@ function startGame() {
   winners = []
   console.log('[GAME STARTED] Players:', players.size)
 
-  // Reset all scores
   for (const player of players.values()) {
     player.ship.score = 0
     player.ship.kills = 0
@@ -205,16 +217,13 @@ function startGame() {
 function endGame() {
   gameActive = false
   
-  // Determine winners
   const sortedPlayers = Array.from(players.values())
     .filter(p => p.ship.alive || p.ship.score > 0)
     .sort((a, b) => b.ship.score - a.ship.score)
   
   if (sortedPlayers.length > 0) {
     const topScore = sortedPlayers[0]!.ship.score
-    winners = sortedPlayers
-      .filter(p => p.ship.score === topScore)
-      .map(p => p.id)
+    winners = sortedPlayers.filter(p => p.ship.score === topScore).map(p => p.id)
   }
   
   broadcast({ 
@@ -235,13 +244,11 @@ function checkGameEnd() {
   
   const elapsed = Date.now() - gameStartTime
   
-  // Time limit reached
   if (elapsed >= gameMode.duration) {
     endGame()
     return
   }
   
-  // Score limit reached (FFA only)
   if (gameMode.mode === 'ffa') {
     for (const player of players.values()) {
       if (player.ship.score >= gameMode.winningScore) {
@@ -252,7 +259,6 @@ function checkGameEnd() {
     }
   }
   
-  // Only one player left
   const alivePlayers = Array.from(players.values()).filter(p => p.ship.alive)
   if (alivePlayers.length === 1 && players.size > 2) {
     winners = [alivePlayers[0]!.id]
@@ -260,42 +266,33 @@ function checkGameEnd() {
   }
 }
 
-// --- Geckos Connection Handler ---
-io.onConnection((channel) => {
-  let playerId: string | null = null
+// --- Socket.io Connection Handler ---
+io.on('connection', (socket) => {
+  console.log(`[+] Player connected: ${socket.id}`)
   
-  console.log(`[+] Player connected: ${channel.id}`)
-  
-  channel.on('join', (data: any) => {
-    // @ts-ignore - Geckos.io channel.id type
-    playerId = channel.id
-    const player = createPlayer(playerId!, data.name)
-    players.set(playerId!, player)
+  socket.on('join', (data: { name: string }) => {
+    const player = createPlayer(socket.id, data.name)
+    players.set(socket.id, player)
     
-    // Send welcome
-    channel.emit('welcome', {
-      playerId,
+    socket.emit('welcome', {
+      playerId: socket.id,
       worldSize: WORLD_SIZE,
       gameMode: gameMode.mode,
     })
     
-    // Broadcast join event
-    // @ts-ignore - Geckos.io type quirks
-    broadcast({ type: 'player-joined', playerId, name: player.name })
-
+    broadcast({ type: 'player-joined', playerId: socket.id, name: player.name })
+    
     console.log(`  Joined as: ${player.name} at (${player.ship.x.toFixed(0)}, ${player.ship.y.toFixed(0)})`)
     console.log(`  Total players: ${players.size}, gameActive: ${gameActive}`)
-
-    // Start game if not running and we have players
+    
     if (!gameActive && players.size >= 1) {
       console.log('[AUTO-START] Starting game with', players.size, 'players')
       startGame()
     }
   })
   
-  channel.on('input', (data: any) => {
-    if (!playerId) return
-    const player = players.get(playerId)
+  socket.on('input', (data: { seq: number; thrust: boolean; left: boolean; right: boolean; fire: boolean; teleport: boolean }) => {
+    const player = players.get(socket.id)
     if (!player) return
     
     player.input = {
@@ -308,21 +305,17 @@ io.onConnection((channel) => {
     player.inputSeq = data.seq
   })
   
-  channel.on('ping', (data: any) => {
-    channel.emit('pong', { timestamp: Date.now() })
+  socket.on('ping', (data: { timestamp: number }) => {
+    socket.emit('pong', { timestamp: Date.now() })
   })
   
-  channel.onDisconnect(() => {
-    if (playerId) {
-      players.delete(playerId)
-      // @ts-ignore - Geckos.io type quirks
-      broadcast({ type: 'player-left', playerId })
-      console.log(`[-] Player disconnected: ${playerId}`)
-      
-      // End game if no players left
-      if (players.size === 0) {
-        gameActive = false
-      }
+  socket.on('disconnect', () => {
+    players.delete(socket.id)
+    broadcast({ type: 'player-left', playerId: socket.id })
+    console.log(`[-] Player disconnected: ${socket.id}`)
+    
+    if (players.size === 0) {
+      gameActive = false
     }
   })
 })
@@ -331,12 +324,10 @@ io.onConnection((channel) => {
 function updatePhysics() {
   const now = Date.now()
   
-  // Update ships
   for (const player of players.values()) {
     const ship = player.ship
     const input = player.input
     
-    // Handle respawn
     if (!ship.alive && player.respawnTime && now >= player.respawnTime) {
       const spawn = findSafeSpawnPoint()
       ship.x = spawn.x
@@ -350,36 +341,30 @@ function updatePhysics() {
     
     if (!ship.alive) continue
     
-    // Rotation
     if (input.left) ship.angle -= SHIP_ROTATION_SPEED
     if (input.right) ship.angle += SHIP_ROTATION_SPEED
     
-    // Thrust
     if (input.thrust) {
       const thrustVec = angleToVector(ship.angle)
       ship.vx += thrustVec.x * SHIP_THRUST
       ship.vy += thrustVec.y * SHIP_THRUST
     }
     
-    // Friction
     ship.vx *= SHIP_FRICTION
     ship.vy *= SHIP_FRICTION
     
-    // Speed limit
     const speed = Math.hypot(ship.vx, ship.vy)
     if (speed > SHIP_MAX_SPEED) {
       ship.vx = (ship.vx / speed) * SHIP_MAX_SPEED
       ship.vy = (ship.vy / speed) * SHIP_MAX_SPEED
     }
     
-    // Position
     ship.x += ship.vx
     ship.y += ship.vy
     const wrapped = wrapPosition(ship.x, ship.y)
     ship.x = wrapped.x
     ship.y = wrapped.y
     
-    // Fire
     if (player.fireCooldown > 0) player.fireCooldown--
     if (input.fire && player.fireCooldown <= 0) {
       const dir = angleToVector(ship.angle)
@@ -395,19 +380,17 @@ function updatePhysics() {
       player.fireCooldown = BULLET_FIRE_RATE
     }
     
-    // Teleport (emergency dodge - costs points)
     if (input.teleport) {
       const spawn = findSafeSpawnPoint()
       ship.x = spawn.x
       ship.y = spawn.y
       ship.vx = 0
       ship.vy = 0
-      ship.score = Math.max(0, ship.score - 50) // Penalty
+      ship.score = Math.max(0, ship.score - 50)
       input.teleport = false
     }
   }
   
-  // Update bullets
   for (let i = bullets.length - 1; i >= 0; i--) {
     const bullet = bullets[i]!
     bullet.x += bullet.vx
@@ -416,14 +399,12 @@ function updatePhysics() {
     bullet.x = wrapped.x
     bullet.y = wrapped.y
     
-    // Lifetime
     bullet.life = (bullet.life ?? 0) + 1
     if (bullet.life! > BULLET_LIFETIME) {
       bullets.splice(i, 1)
     }
   }
   
-  // Update asteroids
   for (const asteroid of asteroids) {
     asteroid.x += asteroid.vx
     asteroid.y += asteroid.vy
@@ -432,7 +413,6 @@ function updatePhysics() {
     asteroid.y = wrapped.y
   }
   
-  // Collisions: Bullets vs Asteroids
   for (let bi = bullets.length - 1; bi >= 0; bi--) {
     const bullet = bullets[bi]!
     let bulletHit = false
@@ -442,7 +422,6 @@ function updatePhysics() {
       if (distance(bullet, asteroid) < asteroid.radius) {
         bulletHit = true
         
-        // Split asteroid
         if (asteroid.size === 'large') {
           asteroids.splice(ai, 1)
           for (let j = 0; j < 2; j++) {
@@ -467,7 +446,6 @@ function updatePhysics() {
           asteroids.splice(ai, 1)
         }
         
-        // Score for bullet owner
         const owner = players.get(bullet.ownerId)
         if (owner) {
           owner.ship.score += asteroid.size === 'large' ? 20 : asteroid.size === 'medium' ? 50 : 100
@@ -477,12 +455,9 @@ function updatePhysics() {
       }
     }
     
-    if (bulletHit) {
-      bullets.splice(bi, 1)
-    }
+    if (bulletHit) bullets.splice(bi, 1)
   }
   
-  // Collisions: Bullets vs Ships
   for (let bi = bullets.length - 1; bi >= 0; bi--) {
     const bullet = bullets[bi]!
     
@@ -493,20 +468,16 @@ function updatePhysics() {
       if (distance(bullet, player.ship) < SHIP_COLLISION_RADIUS) {
         bullets.splice(bi, 1)
         
-        // Kill ship
         player.ship.alive = false
         player.ship.deaths++
         player.respawnTime = now + RESPAWN_TIME
         
-        // Award kill
         const killer = players.get(bullet.ownerId)
         if (killer) {
           killer.ship.kills++
           killer.ship.score += 100
         }
         
-        // Broadcast death event
-        // @ts-ignore - Geckos.io type quirks
         broadcast({
           type: 'player-died',
           playerId: player.id,
@@ -518,20 +489,16 @@ function updatePhysics() {
     }
   }
   
-  // Collisions: Ships vs Asteroids
   for (const player of players.values()) {
     const ship = player.ship
     if (!ship.alive) continue
     
     for (const asteroid of asteroids) {
       if (distance(ship, asteroid) < asteroid.radius * ASTEROID_COLLISION_FACTOR + SHIP_COLLISION_RADIUS) {
-        // Kill ship
         ship.alive = false
         ship.deaths++
         player.respawnTime = now + RESPAWN_TIME
         
-        // Broadcast death event
-        // @ts-ignore - Geckos.io type quirks
         broadcast({
           type: 'player-died',
           playerId: player.id,
@@ -541,7 +508,6 @@ function updatePhysics() {
     }
   }
   
-  // Asteroid vs Asteroid collisions
   for (let i = 0; i < asteroids.length; i++) {
     for (let j = i + 1; j < asteroids.length; j++) {
       const a1 = asteroids[i]!
@@ -550,16 +516,13 @@ function updatePhysics() {
       const minDist = a1.radius + a2.radius
       
       if (dist < minDist && dist > 0) {
-        // Normalize collision vector
         const nx = (a2.x - a1.x) / dist
         const ny = (a2.y - a1.y) / dist
         
-        // Relative velocity
         const dvx = a1.vx - a2.vx
         const dvy = a1.vy - a2.vy
         const dvn = dvx * nx + dvy * ny
         
-        // Only resolve if approaching
         if (dvn > 0) {
           const m1 = a1.radius * a1.radius
           const m2 = a2.radius * a2.radius
@@ -571,7 +534,6 @@ function updatePhysics() {
           a2.vx += impulse * m1 * nx
           a2.vy += impulse * m1 * ny
           
-          // Separate
           const overlap = minDist - dist
           a1.x -= nx * overlap * 0.5
           a1.y -= ny * overlap * 0.5
@@ -582,25 +544,9 @@ function updatePhysics() {
     }
   }
   
-  // Replenish asteroids
   while (asteroids.length < 30) {
     asteroids.push(createAsteroid())
   }
-}
-
-function broadcastState() {
-  gameStateSeq++
-  
-  const state = {
-    seq: gameStateSeq,
-    ships: Array.from(players.values()).map(p => p.ship),
-    asteroids,
-    bullets,
-    gameActive,
-    timeRemaining: gameActive ? Math.max(0, gameMode.duration - (Date.now() - gameStartTime)) : 0,
-  }
-  
-  io.emit('state', state)
 }
 
 // Run at 60 ticks per second

@@ -13,105 +13,54 @@
       background: #000;
       font-family: "Courier New", Courier, monospace;
     }
-    #game-canvas {
-      display: block;
-      width: 100%;
-      height: 100%;
-    }
+    #game-canvas { display: block; width: 100%; height: 100%; }
     #ui-layer {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
       pointer-events: none;
     }
     #hud {
-      position: absolute;
-      top: 20px;
-      left: 20px;
-      color: #fff;
-      font-size: 14px;
-      text-shadow: 0 0 5px #000;
+      position: absolute; top: 20px; left: 20px; color: #fff;
+      font-size: 14px; text-shadow: 0 0 5px #000;
     }
     #radar {
-      position: absolute;
-      bottom: 20px;
-      right: 20px;
-      border: 2px solid #444;
-      border-radius: 50%;
+      position: absolute; bottom: 20px; right: 20px;
+      border: 2px solid #444; border-radius: 50%;
       background: rgba(0, 0, 0, 0.7);
     }
     #connection-status {
-      position: absolute;
-      top: 20px;
-      right: 20px;
-      color: #888;
-      font-size: 12px;
+      position: absolute; top: 20px; right: 20px;
+      color: #888; font-size: 12px;
     }
     #join-screen {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
       background: rgba(0, 0, 0, 0.9);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      pointer-events: auto;
-      z-index: 100;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      pointer-events: auto; z-index: 100;
     }
-    #join-screen.hidden {
-      display: none;
-    }
-    #join-screen h1 {
-      color: #fff;
-      font-size: 48px;
-      margin-bottom: 30px;
-    }
+    #join-screen.hidden { display: none; }
+    #join-screen h1 { color: #fff; font-size: 48px; margin-bottom: 30px; }
     #join-screen input {
-      padding: 12px 20px;
-      font-size: 18px;
-      font-family: inherit;
-      border: 2px solid #444;
-      border-radius: 8px;
-      background: #111;
-      color: #fff;
-      width: 300px;
-      margin-bottom: 20px;
+      padding: 12px 20px; font-size: 18px; font-family: inherit;
+      border: 2px solid #444; border-radius: 8px;
+      background: #111; color: #fff; width: 300px; margin-bottom: 20px;
     }
     #join-screen button {
-      padding: 12px 40px;
-      font-size: 18px;
-      font-family: inherit;
-      border: none;
-      border-radius: 8px;
-      background: #0a0;
-      color: #fff;
-      cursor: pointer;
-      transition: background 0.2s;
+      padding: 12px 40px; font-size: 18px; font-family: inherit;
+      border: none; border-radius: 8px;
+      background: #0a0; color: #fff; cursor: pointer;
     }
-    #join-screen button:hover {
-      background: #0c0;
-    }
-    #join-screen .hint {
-      color: #666;
-      font-size: 12px;
-      margin-top: 20px;
-    }
+    #join-screen button:hover { background: #0c0; }
+    #join-screen .hint { color: #666; font-size: 12px; margin-top: 20px; }
   </style>
 </head>
 <body>
   <canvas id="game-canvas"></canvas>
-  
   <div id="ui-layer">
     <div id="hud"></div>
     <canvas id="radar" width="150" height="150"></canvas>
     <div id="connection-status">Connecting...</div>
   </div>
-  
   <div id="join-screen">
     <h1>ASTEROIDS MP</h1>
     <input type="text" id="player-name" placeholder="Enter your name" maxlength="20" autocomplete="off">
@@ -119,33 +68,33 @@
     <p class="hint">WASD / Arrows to move • Space to fire</p>
   </div>
 
-  <script type="module">
-    // Inline the game code - uses esm.sh for reliable browser ES modules
-    import geckos from 'https://esm.sh/@geckos.io/client@3.1.0'
-
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script>
+    // --- Constants ---
     const WORLD_SIZE = 4000
     const SHIP_SIZE = 24
     const SHIP_COLLISION_RADIUS = 10
+    const ASTEROID_GLYPHS = '▓▒░█▀▄■●◐◑◒◓⬡⬢◆◇○●'
 
-    // Connection - explicitly use port 3000 (same as HTTP)
-    const connection = geckos({ port: 3000 })
+    // --- Socket.io Connection ---
+    const socket = io()
     let playerId = null
-    
+
     const connectionStatus = document.getElementById('connection-status')
     
-    connection.onConnect(() => {
-      console.log('[+] Connected')
+    socket.on('connect', () => {
+      console.log('[+] Connected to server')
       connectionStatus.textContent = 'Connected'
       connectionStatus.style.color = '#0a0'
     })
     
-    connection.onDisconnect(() => {
-      console.log('[-] Disconnected')
+    socket.on('disconnect', () => {
+      console.log('[-] Disconnected from server')
       connectionStatus.textContent = 'Disconnected'
       connectionStatus.style.color = '#a00'
     })
-    
-    // Game state
+
+    // --- Game State ---
     const localShip = { id: '', name: '', x: 0, y: 0, vx: 0, vy: 0, angle: 0, alive: true, score: 0, deaths: 0, kills: 0, prevX: 0, prevY: 0 }
     const remoteShips = new Map()
     const asteroids = []
@@ -153,20 +102,20 @@
     let gameActive = false
     let timeRemaining = 0
     let leaderboard = []
-    
-    // Input
+
+    // --- Input ---
     const input = { thrust: false, left: false, right: false, fire: false, teleport: false }
     let inputSeq = 0
     let fireHeld = false
     const keysDown = new Set()
-    
-    // Canvas
+
+    // --- Canvas Setup ---
     const canvas = document.getElementById('game-canvas')
     const ctx = canvas.getContext('2d')
     const radarCanvas = document.getElementById('radar')
     const radarCtx = radarCanvas.getContext('2d')
     const hud = document.getElementById('hud')
-    
+
     function resizeCanvas() {
       const dpr = window.devicePixelRatio || 1
       canvas.width = window.innerWidth * dpr
@@ -175,17 +124,17 @@
     }
     resizeCanvas()
     window.addEventListener('resize', resizeCanvas)
-    
-    // Camera
+
+    // --- Camera ---
     const camera = { x: 0, y: 0 }
-    function updateCamera(dt) {
+    function updateCamera() {
       camera.x += (localShip.x - camera.x) * 0.1
       camera.y += (localShip.y - camera.y) * 0.1
       camera.x = Math.max(0, Math.min(WORLD_SIZE - window.innerWidth, camera.x))
       camera.y = Math.max(0, Math.min(WORLD_SIZE - window.innerHeight, camera.y))
     }
-    
-    // Input handling
+
+    // --- Input Handling ---
     document.addEventListener('keydown', (e) => {
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault()
       keysDown.add(e.code)
@@ -201,29 +150,30 @@
       input.right = keysDown.has('ArrowRight') || keysDown.has('KeyD')
       if (e.code === 'Space') fireHeld = false
     })
-    
-    // Join UI
+
+    // --- Join UI ---
     const joinScreen = document.getElementById('join-screen')
     const joinBtn = document.getElementById('join-btn')
     const nameInput = document.getElementById('player-name')
     nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') joinBtn.click() })
     joinBtn.addEventListener('click', () => {
       const name = nameInput.value.trim() || 'Player'
-      connection.emit('join', { name })
+      socket.emit('join', { name })
       joinScreen.classList.add('hidden')
     })
     nameInput.focus()
-    
-    // Network handlers
-    connection.on('welcome', (data) => {
+
+    // --- Socket.io Event Handlers ---
+    socket.on('welcome', (data) => {
       playerId = data.playerId
       localShip.id = playerId
       localShip.name = 'You'
       console.log('[*] Welcome! Player ID:', playerId)
     })
-    
-    connection.on('state', (data) => {
+
+    socket.on('state', (data) => {
       console.log('[STATE] gameActive:', data.gameActive, 'timeRemaining:', data.timeRemaining, 'ships:', data.ships.length)
+      
       const serverShip = data.ships.find(s => s.id === playerId)
       if (serverShip) {
         localShip.prevX = localShip.x; localShip.prevY = localShip.y
@@ -232,37 +182,54 @@
         localShip.angle = serverShip.angle; localShip.alive = serverShip.alive
         localShip.score = serverShip.score; localShip.deaths = serverShip.deaths; localShip.kills = serverShip.kills
       }
+      
       remoteShips.clear()
-      for (const ship of data.ships) { if (ship.id !== playerId) remoteShips.set(ship.id, ship) }
-      asteroids.length = 0; asteroids.push(...data.asteroids)
-      bullets.length = 0; bullets.push(...data.bullets)
-      gameActive = data.gameActive; timeRemaining = data.timeRemaining
+      for (const ship of data.ships) {
+        if (ship.id !== playerId) remoteShips.set(ship.id, ship)
+      }
+      
+      asteroids.length = 0
+      asteroids.push(...data.asteroids)
+      bullets.length = 0
+      bullets.push(...data.bullets)
+      
+      gameActive = data.gameActive
+      timeRemaining = data.timeRemaining
     })
-    
-    connection.on('event', (event) => {
+
+    socket.on('event', (event) => {
       console.log('[EVENT]', event.type, event)
       if (event.type === 'game-end' && event.leaderboard) leaderboard = event.leaderboard
       if (event.type === 'game-start') console.log('[GAME STARTED] Duration:', event.duration)
     })
-    
-    // Send input
+
+    // --- Send Input (60 TPS) ---
     setInterval(() => {
       if (!playerId) return
-      connection.emit('input', { seq: inputSeq++, thrust: input.thrust, left: input.left, right: input.right, fire: input.fire, teleport: input.teleport })
-      input.fire = false; input.teleport = false
+      socket.emit('input', {
+        seq: inputSeq++,
+        thrust: input.thrust,
+        left: input.left,
+        right: input.right,
+        fire: input.fire,
+        teleport: input.teleport,
+      })
+      input.fire = false
+      input.teleport = false
     }, 1000 / 60)
-    
-    // Rendering
-    const ASTEROID_GLYPHS = '▓▒░█▀▄■●◐◑◒◓⬡⬢◆◇○●'
-    
+
+    // --- Rendering ---
     function renderAsteroid(asteroid) {
       const screenX = asteroid.x - camera.x, screenY = asteroid.y - camera.y
       if (screenX < -100 || screenX > window.innerWidth + 100 || screenY < -100 || screenY > window.innerHeight + 100) return
+      
       ctx.save(); ctx.translate(screenX, screenY)
       const density = asteroid.size === 'large' ? 9 : asteroid.size === 'medium' ? 7 : 5
       const fontSize = asteroid.size === 'large' ? 13 : asteroid.size === 'medium' ? 10 : 8
+      
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
       ctx.globalAlpha = asteroid.size === 'large' ? 0.95 : asteroid.size === 'medium' ? 0.85 : 0.75
+      
       for (const vertex of asteroid.vertices) {
         const glyph = ASTEROID_GLYPHS[Math.floor(Math.abs(vertex.x + vertex.y) % ASTEROID_GLYPHS.length)]
         const shadeIndex = ASTEROID_GLYPHS.indexOf(glyph)
@@ -271,22 +238,27 @@
         ctx.font = `bold ${fontSize}px "Courier New", monospace`
         ctx.fillText(glyph, vertex.x, vertex.y)
       }
+      
       ctx.globalAlpha = 1; ctx.restore()
     }
-    
+
     function renderShip(ship, isLocal) {
       if (!ship.alive) return
+      
       const screenX = ship.x - camera.x, screenY = ship.y - camera.y
       if (screenX < -50 || screenX > window.innerWidth + 50 || screenY < -50 || screenY > window.innerHeight + 50) return
+      
       ctx.save(); ctx.translate(screenX, screenY); ctx.rotate(ship.angle + Math.PI / 2)
       ctx.fillStyle = isLocal ? '#fff' : '#66f'
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+      
       const glyphs = ['▲', '◢', '◣']
       const positions = [
         { x: 0, y: -SHIP_SIZE / 2, size: 20 },
         { x: -SHIP_SIZE / 3, y: SHIP_SIZE / 3, size: 12, angle: -0.3 },
         { x: SHIP_SIZE / 3, y: SHIP_SIZE / 3, size: 12, angle: 0.3 },
       ]
+      
       for (let i = 0; i < positions.length; i++) {
         const pos = positions[i]
         ctx.save(); ctx.translate(pos.x, pos.y)
@@ -295,32 +267,38 @@
         ctx.fillText(glyphs[i], 0, 0)
         ctx.restore()
       }
+      
       ctx.restore()
+      
       ctx.fillStyle = isLocal ? '#0f0' : '#ff0'
       ctx.font = '12px "Courier New", monospace'
       ctx.textAlign = 'center'
       ctx.fillText(ship.name || 'Player', screenX, screenY - 30)
     }
-    
+
     function renderBullet(bullet) {
       const screenX = bullet.x - camera.x, screenY = bullet.y - camera.y
       if (screenX < 0 || screenX > window.innerWidth || screenY < 0 || screenY > window.innerHeight) return
+      
       ctx.fillStyle = '#ff0'
       ctx.font = 'bold 14px "Courier New", monospace'
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
       ctx.fillText('●', screenX, screenY)
     }
-    
+
     function renderRadar() {
       const size = 150, centerX = size / 2, centerY = size / 2, scale = size / WORLD_SIZE
       radarCtx.clearRect(0, 0, size, size)
+      
       radarCtx.fillStyle = 'rgba(0, 0, 0, 0.8)'
       radarCtx.beginPath(); radarCtx.arc(centerX, centerY, size / 2, 0, Math.PI * 2); radarCtx.fill()
+      
       radarCtx.fillStyle = '#444'
       for (const asteroid of asteroids) {
         const x = centerX + asteroid.x * scale, y = centerY + asteroid.y * scale
         radarCtx.fillRect(x - 1, y - 1, 2, 2)
       }
+      
       for (const ship of remoteShips.values()) {
         if (!ship.alive) continue
         const x = centerX + ship.x * scale, y = centerY + ship.y * scale
@@ -328,6 +306,7 @@
         radarCtx.beginPath(); radarCtx.moveTo(x, y - 3); radarCtx.lineTo(x - 2, y + 2); radarCtx.lineTo(x + 2, y + 2)
         radarCtx.closePath(); radarCtx.fill()
       }
+      
       if (localShip.alive && playerId) {
         const x = centerX + localShip.x * scale, y = centerY + localShip.y * scale
         radarCtx.fillStyle = '#0f0'
@@ -335,11 +314,12 @@
         radarCtx.closePath(); radarCtx.fill()
       }
     }
-    
+
     function renderHUD() {
       const minutes = Math.floor(timeRemaining / 60000)
       const seconds = Math.floor((timeRemaining % 60000) / 1000)
       const timeStr = `${minutes}:${seconds.toString().padStart(2, '0')}`
+      
       hud.innerHTML = `
         <div style="color: ${gameActive ? '#0f0' : '#f00'}; font-weight: bold;">${gameActive ? '● LIVE' : '○ WAITING'}</div>
         <div style="margin: 8px 0;">TIME: ${timeStr}</div>
@@ -355,24 +335,30 @@
         ` : ''}
       `
     }
-    
-    // Main loop
+
+    // --- Main Loop ---
     let lastTime = performance.now()
     function gameLoop(currentTime) {
       const dt = currentTime - lastTime
       lastTime = currentTime
+      
       ctx.fillStyle = '#000'
       ctx.fillRect(0, 0, window.innerWidth, window.innerHeight)
-      if (playerId && localShip.alive) updateCamera(dt)
+      
+      if (playerId && localShip.alive) updateCamera()
+      
       for (const asteroid of asteroids) renderAsteroid(asteroid)
       for (const bullet of bullets) renderBullet(bullet)
       for (const ship of remoteShips.values()) renderShip(ship, false)
       if (playerId) renderShip(localShip, true)
+      
       renderRadar()
       renderHUD()
+      
       requestAnimationFrame(gameLoop)
     }
     requestAnimationFrame(gameLoop)
+    
     console.log('🚀 Asteroids MP client starting...')
   </script>
 </body>
