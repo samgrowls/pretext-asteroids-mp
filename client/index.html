@@ -26,6 +26,7 @@
       position: absolute; bottom: 20px; right: 20px;
       border: 2px solid #444; border-radius: 50%;
       background: rgba(0, 0, 0, 0.7);
+      width: 180px; height: 180px;
     }
     #connection-status {
       position: absolute; top: 20px; right: 20px;
@@ -58,7 +59,7 @@
   <canvas id="game-canvas"></canvas>
   <div id="ui-layer">
     <div id="hud"></div>
-    <canvas id="radar" width="150" height="150"></canvas>
+    <canvas id="radar" width="180" height="180"></canvas>
     <div id="connection-status">Connecting...</div>
   </div>
   <div id="join-screen">
@@ -518,31 +519,56 @@
     }
 
     function renderRadar() {
-      const size = 150, centerX = size / 2, centerY = size / 2, scale = size / WORLD_SIZE
+      const size = 180, centerX = size / 2, centerY = size / 2
+      const scale = size / WORLD_SIZE  // 180/4000 = 0.045
+      
       radarCtx.clearRect(0, 0, size, size)
-      
-      radarCtx.fillStyle = 'rgba(0, 0, 0, 0.8)'
-      radarCtx.beginPath(); radarCtx.arc(centerX, centerY, size / 2, 0, Math.PI * 2); radarCtx.fill()
-      
-      radarCtx.fillStyle = '#444'
+
+      // Dark background circle
+      radarCtx.fillStyle = 'rgba(0, 0, 0, 0.85)'
+      radarCtx.beginPath()
+      radarCtx.arc(centerX, centerY, size / 2, 0, Math.PI * 2)
+      radarCtx.fill()
+      radarCtx.strokeStyle = '#444'
+      radarCtx.lineWidth = 2
+      radarCtx.stroke()
+
+      // Asteroids (gray dots)
+      radarCtx.fillStyle = '#666'
       for (const asteroid of asteroids) {
-        const x = centerX + asteroid.x * scale, y = centerY + asteroid.y * scale
-        radarCtx.fillRect(x - 1, y - 1, 2, 2)
+        const x = centerX + (asteroid.x - WORLD_SIZE/2) * scale
+        const y = centerY + (asteroid.y - WORLD_SIZE/2) * scale
+        const dotSize = asteroid.size === 'large' ? 2.5 : asteroid.size === 'medium' ? 2 : 1.5
+        radarCtx.beginPath()
+        radarCtx.arc(x, y, dotSize, 0, Math.PI * 2)
+        radarCtx.fill()
       }
-      
+
+      // Remote ships (red triangles)
       for (const ship of remoteShips.values()) {
         if (!ship.alive) continue
-        const x = centerX + ship.x * scale, y = centerY + ship.y * scale
-        radarCtx.fillStyle = '#f00'
-        radarCtx.beginPath(); radarCtx.moveTo(x, y - 3); radarCtx.lineTo(x - 2, y + 2); radarCtx.lineTo(x + 2, y + 2)
-        radarCtx.closePath(); radarCtx.fill()
+        const x = centerX + (ship.x - WORLD_SIZE/2) * scale
+        const y = centerY + (ship.y - WORLD_SIZE/2) * scale
+        radarCtx.fillStyle = '#f44'
+        radarCtx.beginPath()
+        radarCtx.moveTo(x, y - 4)
+        radarCtx.lineTo(x - 3, y + 3)
+        radarCtx.lineTo(x + 3, y + 3)
+        radarCtx.closePath()
+        radarCtx.fill()
       }
-      
+
+      // Local ship (green triangle)
       if (localShip.alive && playerId) {
-        const x = centerX + localShip.x * scale, y = centerY + localShip.y * scale
-        radarCtx.fillStyle = '#0f0'
-        radarCtx.beginPath(); radarCtx.moveTo(x, y - 3); radarCtx.lineTo(x - 2, y + 2); radarCtx.lineTo(x + 2, y + 2)
-        radarCtx.closePath(); radarCtx.fill()
+        const x = centerX + (localShip.x - WORLD_SIZE/2) * scale
+        const y = centerY + (localShip.y - WORLD_SIZE/2) * scale
+        radarCtx.fillStyle = '#4f4'
+        radarCtx.beginPath()
+        radarCtx.moveTo(x, y - 4)
+        radarCtx.lineTo(x - 3, y + 3)
+        radarCtx.lineTo(x + 3, y + 3)
+        radarCtx.closePath()
+        radarCtx.fill()
       }
     }
 
