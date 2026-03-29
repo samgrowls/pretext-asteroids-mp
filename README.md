@@ -5,10 +5,16 @@ Multiplayer asteroids game with **Geckos.io** WebRTC networking for low-latency 
 ## 🎮 Features
 
 - **Large 4000x4000 pixel world** with camera follow
-- **Real-time multiplayer** via WebRTC DataChannels
+- **Real-time multiplayer** via WebRTC DataChannels (~20-30ms latency)
 - **Text-rendered graphics** using Pretext glyph caching
 - **Radar/minimap** showing all players and asteroids
 - **Server-authoritative physics** at 60 TPS
+- **Death + respawn** (3 second respawn timer)
+- **Score tracking** (asteroid kills + ship kills)
+- **Live leaderboard** (top 5 players)
+- **Game timer** (3 minute matches)
+- **Teleport mechanic** (emergency dodge with score penalty)
+- **Asteroid physics** (asteroid vs asteroid collisions)
 - **Multiple game modes** (planned): FFA, Teams, CTF, King of the Hill
 
 ## 🚀 Quick Start
@@ -22,14 +28,24 @@ bun install
 ### Run development server
 
 ```bash
-bun run dev
+CLIENT_DIR=./client bun run server/src/index.ts
 ```
-
-This starts both the server and client in watch mode.
 
 ### Open in browser
 
-Navigate to `http://localhost:3000`
+Navigate to `http://localhost:3333`
+
+**For LAN access** (like single-player version):
+
+```bash
+# Find your LAN IP
+hostname -I | awk '{print $1}'
+
+# Start server bound to all interfaces
+HOST=0.0.0.0 CLIENT_DIR=./client bun run server/src/index.ts
+```
+
+Then access from other devices: `http://<your-lan-ip>:3333`
 
 ### Controls
 
@@ -82,7 +98,7 @@ pretext-asteroids-mp/
 
 ## 🎯 Development Phases
 
-### Phase 1: Foundation ✅ (Current)
+### Phase 1: Foundation ✅
 - [x] Geckos.io server setup
 - [x] Basic client connection
 - [x] Ship position sync
@@ -90,17 +106,23 @@ pretext-asteroids-mp/
 - [x] Basic radar
 - [x] Bullets + asteroids
 
-### Phase 2: Combat (Next)
-- [ ] Server-authoritative collisions
-- [ ] Death + respawn
-- [ ] Score tracking
-- [ ] Free For All mode
+### Phase 2: Combat ✅ (Current)
+- [x] Server-authoritative collisions
+- [x] Ship vs asteroid collisions
+- [x] Ship vs ship bullets
+- [x] Death + respawn (3s timer)
+- [x] Score tracking
+- [x] Game timer (3 min matches)
+- [x] Live leaderboard
+- [x] Teleport mechanic
+- [x] Asteroid replenishment
 
-### Phase 3: Polish
+### Phase 3: Polish (Next)
 - [ ] Client-side prediction
 - [ ] Entity interpolation
 - [ ] Lag compensation
-- [ ] Improved radar
+- [ ] Improved radar (zoom, filters)
+- [ ] Sound effects
 
 ### Phase 4: Game Modes
 - [ ] Team Deathmatch
