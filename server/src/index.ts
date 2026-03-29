@@ -7,12 +7,13 @@ import {
   type ShipState, type AsteroidState, type BulletState, type InputState, DEFAULT_INPUT, type GameEvent 
 } from '@asteroids/shared'
 
-const PORT = process.env.PORT || 3000
+const PORT = process.env.PORT || 3333
+const CLIENT_DIR = process.env.CLIENT_DIR || '../../client'
 
 // --- Express + Geckos Setup ---
 const app = express()
 app.use(cors())
-app.use(express.static('../client/dist'))
+app.use(express.static(CLIENT_DIR))
 
 const httpServer = createServer(app)
 // @ts-ignore - Geckos.io accepts server as first argument
