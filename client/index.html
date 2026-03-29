@@ -309,14 +309,9 @@
     // --- Camera ---
     const camera = { x: 0, y: 0 }
     function updateCamera() {
-      // Directly center camera on ship (no lerp, no wrap tracking)
+      // Directly center camera on ship - no clamping, ship always centered
       camera.x = localShip.x - window.innerWidth / 2
       camera.y = localShip.y - window.innerHeight / 2
-      
-      // Soft clamping - allow camera to show edge of world
-      const margin = 100
-      camera.x = Math.max(-margin, Math.min(WORLD_SIZE - window.innerWidth + margin, camera.x))
-      camera.y = Math.max(-margin, Math.min(WORLD_SIZE - window.innerHeight + margin, camera.y))
     }
 
     // --- Input Handling ---
