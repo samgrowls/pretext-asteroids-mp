@@ -79,43 +79,33 @@ function createAsteroid(x?: number, y?: number, size?: 'large' | 'medium' | 'sma
   const finalSize = size ?? (Math.random() > 0.6 ? 'large' : Math.random() > 0.3 ? 'medium' : 'small')
   const baseRadius = finalSize === 'large' ? 50 : finalSize === 'medium' ? 30 : 18
   
-  // Highly varied vertex count for very irregular shapes
+  // Moderate vertex count - enough for irregularity but not crazy
   const vertexCount = finalSize === 'large' 
-    ? 6 + Math.floor(Math.random() * 8)   // 6-13 vertices
+    ? 8 + Math.floor(Math.random() * 4)   // 8-11 vertices
     : finalSize === 'medium' 
-      ? 5 + Math.floor(Math.random() * 6)  // 5-10 vertices
-      : 4 + Math.floor(Math.random() * 4)  // 4-7 vertices
+      ? 7 + Math.floor(Math.random() * 3)  // 7-9 vertices
+      : 6 + Math.floor(Math.random() * 2)  // 6-7 vertices
 
   const vertices: { x: number; y: number }[] = []
   const angles: number[] = []
   
-  // Create VERY irregular angle distribution
+  // Create moderately irregular angle distribution
   let currentAngle = Math.random() * Math.PI * 2
   for (let i = 0; i < vertexCount; i++) {
     angles.push(currentAngle)
-    // Wildly vary the angle gap (0.2 to 1.2 radians) - creates clumps and gaps
-    currentAngle += 0.2 + Math.random() * 1.0
-  }
-  
-  // Add 1-3 extra random vertices for really jagged shapes
-  const extraVertices = Math.floor(Math.random() * 3)
-  for (let i = 0; i < extraVertices; i++) {
-    angles.push(Math.random() * Math.PI * 2)
+    // Moderate angle gap variation (0.5 to 0.9 radians) - keeps it somewhat circular
+    currentAngle += 0.5 + Math.random() * 0.4
   }
   angles.sort((a, b) => a - b)
 
-  // Create vertices with EXTREME radius variation
+  // Create vertices with moderate radius variation (more circular)
   for (let i = 0; i < angles.length; i++) {
     const angle = angles[i]!
-    // Extreme variance: 0.3 to 1.6 (creates deep indentations and sharp protrusions)
-    const variance = 0.3 + Math.random() * 1.3
-    // Occasional very flat sides
-    const flatModifier = Math.random() > 0.75 ? 0.7 : 1.0
-    // Occasional sharp spike
-    const spikeModifier = Math.random() > 0.85 ? 1.5 : 1.0
+    // Moderate variance: 0.7 to 1.3 (subtle irregularity, still mostly circular)
+    const variance = 0.7 + Math.random() * 0.6
     vertices.push({
-      x: Math.cos(angle) * baseRadius * variance * flatModifier * spikeModifier,
-      y: Math.sin(angle) * baseRadius * variance * flatModifier * spikeModifier,
+      x: Math.cos(angle) * baseRadius * variance,
+      y: Math.sin(angle) * baseRadius * variance,
     })
   }
 
@@ -132,6 +122,38 @@ function createAsteroid(x?: number, y?: number, size?: 'large' | 'medium' | 'sma
     size: finalSize,
     vertices,
   }
+}
+
+// Split asteroid into varied sizes
+function splitAsteroid(asteroid: AsteroidState): AsteroidState[] {
+  if (asteroid.size === 'small') return []
+  
+  const fragments: AsteroidState[] = []
+  
+  if (asteroid.size === 'large') {
+    // Large breaks into: 1 medium + 2 small (varied)
+    fragments.push(createAsteroid(asteroid.x, asteroid.y, 'medium'))
+    fragments.push(createAsteroid(asteroid.x, asteroid.y, 'small'))
+    if (Math.random() > 0.5) {
+      fragments.push(createAsteroid(asteroid.x, asteroid.y, 'small'))
+    }
+  } else if (asteroid.size === 'medium') {
+    // Medium breaks into: 1-2 small (varied)
+    fragments.push(createAsteroid(asteroid.x, asteroid.y, 'small'))
+    if (Math.random() > 0.4) {
+      fragments.push(createAsteroid(asteroid.x, asteroid.y, 'small'))
+    }
+  }
+  
+  // Tamer breakup velocities
+  for (const fragment of fragments) {
+    const spreadAngle = Math.random() * Math.PI * 2
+    const spreadSpeed = 0.5 + Math.random() * 1.5  // Much tamer: 0.5-2.0
+    fragment.vx += Math.cos(spreadAngle) * spreadSpeed
+    fragment.vy += Math.sin(spreadAngle) * spreadSpeed
+  }
+  
+  return fragments
 }
 
 // Initialize asteroids
@@ -438,45 +460,29 @@ function updatePhysics() {
   for (let bi = bullets.length - 1; bi >= 0; bi--) {
     const bullet = bullets[bi]!
     let bulletHit = false
-    
+
     for (let ai = asteroids.length - 1; ai >= 0; ai--) {
       const asteroid = asteroids[ai]!
       if (distance(bullet, asteroid) < asteroid.radius) {
         bulletHit = true
-        
-        if (asteroid.size === 'large') {
-          asteroids.splice(ai, 1)
-          for (let j = 0; j < 2; j++) {
-            const newAst = createAsteroid(asteroid.x, asteroid.y, 'medium')
-            const spreadAngle = (j / 2) * Math.PI + Math.random() * 0.5
-            const spreadSpeed = 2
-            newAst.vx += Math.cos(spreadAngle) * spreadSpeed
-            newAst.vy += Math.sin(spreadAngle) * spreadSpeed
-            asteroids.push(newAst)
-          }
-        } else if (asteroid.size === 'medium') {
-          asteroids.splice(ai, 1)
-          for (let j = 0; j < 2; j++) {
-            const newAst = createAsteroid(asteroid.x, asteroid.y, 'small')
-            const spreadAngle = (j / 2) * Math.PI + Math.random() * 0.5
-            const spreadSpeed = 3
-            newAst.vx += Math.cos(spreadAngle) * spreadSpeed
-            newAst.vy += Math.sin(spreadAngle) * spreadSpeed
-            asteroids.push(newAst)
-          }
+
+        // Split asteroid using the new varied split function
+        if (asteroid.size !== 'small') {
+          const fragments = splitAsteroid(asteroid)
+          asteroids.splice(ai, 1, ...fragments)
         } else {
           asteroids.splice(ai, 1)
         }
-        
+
         const owner = players.get(bullet.ownerId)
         if (owner) {
           owner.ship.score += asteroid.size === 'large' ? 20 : asteroid.size === 'medium' ? 50 : 100
         }
-        
+
         break
       }
     }
-    
+
     if (bulletHit) bullets.splice(bi, 1)
   }
   

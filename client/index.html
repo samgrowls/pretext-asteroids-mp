@@ -152,19 +152,19 @@
     
     function createAsteroidHitParticles(x, y) {
       const result = []
-      const count = 8 + Math.floor(Math.random() * 6)
+      const count = 10 + Math.floor(Math.random() * 8)  // More particles: 10-17
       for (let i = 0; i < count; i++) {
         const angle = Math.random() * Math.PI * 2
-        const speed = 1 + Math.random() * 4
+        const speed = 1.5 + Math.random() * 5  // Faster: 1.5-6.5
         result.push({
           x, y,
           vx: Math.cos(angle) * speed,
           vy: Math.sin(angle) * speed,
           glyph: ASTEROID_GLYPHS[Math.floor(Math.random() * ASTEROID_GLYPHS.length)],
-          life: 15 + Math.random() * 15,
-          maxLife: 30,
-          size: 8 + Math.random() * 8,
-          color: `hsl(0, 0%, ${50 + Math.random() * 20}%)`,
+          life: 18 + Math.random() * 18,  // Longer life: 18-36 frames
+          maxLife: 36,
+          size: 9 + Math.random() * 10,  // Larger: 9-19
+          color: `hsl(0, 0%, ${55 + Math.random() * 25}%)`,  // Brighter: 55-80%
         })
       }
       return result
