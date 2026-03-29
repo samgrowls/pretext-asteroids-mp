@@ -8,7 +8,6 @@ import {
 } from '@asteroids/shared'
 
 const PORT = process.env.PORT || 3000
-const RTC_PORT = process.env.RTC_PORT || 3001
 const CLIENT_DIR = process.env.CLIENT_DIR || '../../client'
 
 // --- Game Constants ---
@@ -178,7 +177,6 @@ app.use(express.static(CLIENT_DIR))
 const httpServer = createServer(app)
 // @ts-ignore - Geckos.io type quirks
 const io = geckos(httpServer, {
-  port: RTC_PORT,
   cors: { origin: '*' },
 })
 
