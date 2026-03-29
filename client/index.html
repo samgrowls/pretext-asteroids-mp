@@ -74,35 +74,60 @@
     const WORLD_SIZE = 4000
     const SHIP_SIZE = 24
     const SHIP_COLLISION_RADIUS = 10
+    const SHIP_MAX_SPEED = 12
     const ASTEROID_GLYPHS = '▓▒░█▀▄■●◐◑◒◓⬡⬢◆◇○●'
+    const BULLET_GLYPHS = '●◉◎○'
     const PARTICLE_GLYPHS = '·•◦○●'
     const EXPLOSION_GLYPHS = '✦✧★☆✶✷✸✹✺✻✼✽'
+    const BULLET_LIFETIME = 90
     const PARTICLE_LIFETIME = 25
     const PARTICLE_DECAY = 0.92
 
     // --- Particles ---
     const particles = []
+    const BULLET_TRAIL_GLYPHS = '·•◦'
     
     function angleToVector(angle) {
       return { x: Math.cos(angle), y: Math.sin(angle) }
     }
     
-    function createAfterburnerParticle(ship) {
+    function createAfterburnerParticle(ship, intensity = 1) {
       const thrustDir = angleToVector(ship.angle)
       const baseX = ship.x - thrustDir.x * SHIP_SIZE * 0.6
       const baseY = ship.y - thrustDir.y * SHIP_SIZE * 0.6
-      const spread = 0.3
+      const spread = 0.3 * intensity
       
+      // More particles at higher intensity
+      const count = intensity > 0.8 ? 3 : 2
+      
+      const result = []
+      for (let i = 0; i < count; i++) {
+        result.push({
+          x: baseX + (Math.random() - 0.5) * spread * 2,
+          y: baseY + (Math.random() - 0.5) * spread * 2,
+          vx: ship.vx - thrustDir.x * (2 + Math.random() * 3) * intensity + (Math.random() - 0.5),
+          vy: ship.vy - thrustDir.y * (2 + Math.random() * 3) * intensity + (Math.random() - 0.5),
+          glyph: PARTICLE_GLYPHS[Math.floor(Math.random() * PARTICLE_GLYPHS.length)],
+          life: PARTICLE_LIFETIME * (0.8 + Math.random() * 0.4) * intensity,
+          maxLife: PARTICLE_LIFETIME,
+          size: (8 + Math.random() * 8) * intensity,
+          color: `hsl(${15 + Math.random() * 25}, 100%, ${45 + Math.random() * 25}%)`,
+        })
+      }
+      return result
+    }
+    
+    function createBulletTrailParticle(bullet) {
       return {
-        x: baseX + (Math.random() - 0.5) * spread * 2,
-        y: baseY + (Math.random() - 0.5) * spread * 2,
-        vx: ship.vx - thrustDir.x * (2 + Math.random() * 2) + (Math.random() - 0.5),
-        vy: ship.vy - thrustDir.y * (2 + Math.random() * 2) + (Math.random() - 0.5),
-        glyph: PARTICLE_GLYPHS[Math.floor(Math.random() * PARTICLE_GLYPHS.length)],
-        life: PARTICLE_LIFETIME,
-        maxLife: PARTICLE_LIFETIME,
-        size: 8 + Math.random() * 6,
-        color: `hsl(${20 + Math.random() * 20}, 100%, ${50 + Math.random() * 20}%)`,
+        x: bullet.x + (Math.random() - 0.5) * 4,
+        y: bullet.y + (Math.random() - 0.5) * 4,
+        vx: bullet.vx * 0.3 + (Math.random() - 0.5),
+        vy: bullet.vy * 0.3 + (Math.random() - 0.5),
+        glyph: BULLET_TRAIL_GLYPHS[Math.floor(Math.random() * BULLET_TRAIL_GLYPHS.length)],
+        life: 8 + Math.random() * 6,
+        maxLife: 14,
+        size: 6 + Math.random() * 6,
+        color: `hsl(${45 + Math.random() * 15}, 100%, ${50 + Math.random() * 20}%)`,
       }
     }
     
@@ -120,6 +145,26 @@
           maxLife: 40,
           size: 10 + Math.random() * 10,
           color: `hsl(${Math.random() * 60}, 100%, ${50 + Math.random() * 20}%)`,
+        })
+      }
+      return result
+    }
+    
+    function createAsteroidHitParticles(x, y) {
+      const result = []
+      const count = 8 + Math.floor(Math.random() * 6)
+      for (let i = 0; i < count; i++) {
+        const angle = Math.random() * Math.PI * 2
+        const speed = 1 + Math.random() * 4
+        result.push({
+          x, y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          glyph: ASTEROID_GLYPHS[Math.floor(Math.random() * ASTEROID_GLYPHS.length)],
+          life: 15 + Math.random() * 15,
+          maxLife: 30,
+          size: 8 + Math.random() * 8,
+          color: `hsl(0, 0%, ${50 + Math.random() * 20}%)`,
         })
       }
       return result
@@ -259,12 +304,9 @@
     // --- Camera ---
     const camera = { x: 0, y: 0 }
     function updateCamera() {
-      // Center camera on ship
-      const targetX = localShip.x - window.innerWidth / 2
-      const targetY = localShip.y - window.innerHeight / 2
-      
-      camera.x += (targetX - camera.x) * 0.1
-      camera.y += (targetY - camera.y) * 0.1
+      // Lock camera directly to ship center (no lerp = no drift)
+      camera.x = localShip.x - window.innerWidth / 2
+      camera.y = localShip.y - window.innerHeight / 2
       
       // Clamp to world bounds
       camera.x = Math.max(0, Math.min(WORLD_SIZE - window.innerWidth, camera.x))
@@ -417,11 +459,23 @@
     function renderBullet(bullet) {
       const screenX = bullet.x - camera.x, screenY = bullet.y - camera.y
       if (screenX < 0 || screenX > window.innerWidth || screenY < 0 || screenY > window.innerHeight) return
+
+      // Cycling glyph for bullet
+      const glyphIndex = Math.floor((BULLET_LIFETIME - bullet.life) / 15) % BULLET_GLYPHS.length
+      const glyph = BULLET_GLYPHS[glyphIndex] || '●'
       
-      ctx.fillStyle = '#ff0'
-      ctx.font = 'bold 14px "Courier New", monospace'
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-      ctx.fillText('●', screenX, screenY)
+      // Color shifts from yellow to orange as bullet ages
+      const hue = 50 + bullet.life * 2
+      ctx.fillStyle = `hsl(${hue}, 100%, 55%)`
+      ctx.font = 'bold 16px "Courier New", monospace'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      
+      // Glow effect
+      ctx.shadowColor = `hsl(${hue}, 100%, 50%)`
+      ctx.shadowBlur = 8
+      ctx.fillText(glyph, screenX, screenY)
+      ctx.shadowBlur = 0
     }
 
     function renderRadar() {
@@ -486,12 +540,18 @@
       if (playerId && localShip.alive) {
         updateCamera()
         
-        // Add thruster particles when thrusting
+        // Add thruster particles when thrusting (more at full thrust)
         if (input.thrust && localShip.alive) {
-          for (let i = 0; i < 2; i++) {
-            particles.push(createAfterburnerParticle(localShip))
-          }
+          const speed = Math.hypot(localShip.vx, localShip.vy)
+          const intensity = Math.min(1, speed / SHIP_MAX_SPEED)
+          const thrustParticles = createAfterburnerParticle(localShip, 0.7 + intensity * 0.5)
+          particles.push(...thrustParticles)
         }
+      }
+
+      // Add bullet trail particles
+      for (const bullet of bullets) {
+        particles.push(createBulletTrailParticle(bullet))
       }
 
       // Update and render particles
