@@ -254,28 +254,29 @@
     }
 
     // Client-side asteroid hit detection
-    const bulletHitTracker = new Set()
+    const recentHits = []
     
     function checkAsteroidHits() {
-      const now = Date.now()
       for (const bullet of bullets) {
-        // Skip if we already processed this bullet this frame
-        if (bulletHitTracker.has(bullet.id)) continue
-        
         for (const asteroid of asteroids) {
           const dist = Math.hypot(bullet.x - asteroid.x, bullet.y - asteroid.y)
-          if (dist < asteroid.radius * 0.9) {
-            bulletHitTracker.add(bullet.id)
-            // Spawn hit particles
-            particles.push(...createAsteroidHitParticles(asteroid.x, asteroid.y))
+          if (dist < asteroid.radius * 0.8) {
+            // Check if we already hit this asteroid recently
+            const hitKey = `${asteroid.id}`
+            const alreadyHit = recentHits.some(h => h.key === hitKey && Date.now() - h.time < 200)
+            if (!alreadyHit) {
+              recentHits.push({ key: hitKey, time: Date.now() })
+              // Spawn hit particles
+              particles.push(...createAsteroidHitParticles(asteroid.x, asteroid.y))
+            }
             break
           }
         }
       }
       
-      // Clear tracker periodically
-      if (bulletHitTracker.size > 100) {
-        bulletHitTracker.clear()
+      // Clean old hits
+      while (recentHits.length > 0 && Date.now() - recentHits[0].time > 300) {
+        recentHits.shift()
       }
     }
 
