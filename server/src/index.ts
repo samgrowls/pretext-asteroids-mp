@@ -7,7 +7,7 @@ import {
   type ShipState, type AsteroidState, type BulletState, type InputState, DEFAULT_INPUT
 } from '@asteroids/shared'
 
-const PORT = process.env.PORT || 3333
+const PORT = process.env.PORT || 3000
 const CLIENT_DIR = process.env.CLIENT_DIR || '../../client'
 
 // --- Game Constants ---
