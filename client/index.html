@@ -462,10 +462,63 @@
       ctx.restore()
     }
 
+    // Render asteroid with world wrapping
+    function renderAsteroidWrapped(asteroid) {
+      const baseX = asteroid.x - camera.x
+      const baseY = asteroid.y - camera.y
+      
+      // Render at base position
+      renderAsteroidAt(asteroid, baseX, baseY)
+      
+      // Render wrapped copies at edges
+      // Left edge → also render on right
+      if (baseX < -100) renderAsteroidAt(asteroid, baseX + WORLD_SIZE, baseY)
+      // Right edge → also render on left
+      if (baseX > window.innerWidth + 100) renderAsteroidAt(asteroid, baseX - WORLD_SIZE, baseY)
+      // Top edge → also render on bottom
+      if (baseY < -100) renderAsteroidAt(asteroid, baseX, baseY + WORLD_SIZE)
+      // Bottom edge → also render on top
+      if (baseY > window.innerHeight + 100) renderAsteroidAt(asteroid, baseX, baseY - WORLD_SIZE)
+      
+      // Corner cases (render in diagonal corners too)
+      if (baseX < -100 && baseY < -100) renderAsteroidAt(asteroid, baseX + WORLD_SIZE, baseY + WORLD_SIZE)
+      if (baseX > window.innerWidth + 100 && baseY < -100) renderAsteroidAt(asteroid, baseX - WORLD_SIZE, baseY + WORLD_SIZE)
+      if (baseX < -100 && baseY > window.innerHeight + 100) renderAsteroidAt(asteroid, baseX + WORLD_SIZE, baseY - WORLD_SIZE)
+      if (baseX > window.innerWidth + 100 && baseY > window.innerHeight + 100) renderAsteroidAt(asteroid, baseX - WORLD_SIZE, baseY - WORLD_SIZE)
+    }
+
+    function renderAsteroidAt(asteroid, screenX, screenY) {
+      if (screenX < -100 || screenX > window.innerWidth + 100 || screenY < -100 || screenY > window.innerHeight + 100) return
+
+      ctx.save()
+      ctx.translate(screenX, screenY)
+      ctx.rotate(asteroid.rotation)
+      
+      const canvas = getAsteroidCanvas(asteroid)
+      const dim = canvas.width / (window.devicePixelRatio || 1)
+      const offset = dim / 2
+      ctx.drawImage(canvas, -offset, -offset)
+
+      ctx.restore()
+    }
+
     function renderShip(ship, isLocal) {
       if (!ship.alive) return
 
-      const screenX = ship.x - camera.x, screenY = ship.y - camera.y
+      const baseX = ship.x - camera.x
+      const baseY = ship.y - camera.y
+      
+      // Render at base position
+      renderShipAt(ship, isLocal, baseX, baseY)
+      
+      // Render wrapped copies at edges
+      if (baseX < -50) renderShipAt(ship, isLocal, baseX + WORLD_SIZE, baseY)
+      if (baseX > window.innerWidth + 50) renderShipAt(ship, isLocal, baseX - WORLD_SIZE, baseY)
+      if (baseY < -50) renderShipAt(ship, isLocal, baseX, baseY + WORLD_SIZE)
+      if (baseY > window.innerHeight + 50) renderShipAt(ship, isLocal, baseX, baseY - WORLD_SIZE)
+    }
+
+    function renderShipAt(ship, isLocal, screenX, screenY) {
       if (screenX < -50 || screenX > window.innerWidth + 50 || screenY < -50 || screenY > window.innerHeight + 50) return
 
       ctx.save(); ctx.translate(screenX, screenY); ctx.rotate(ship.angle + Math.PI / 2)
@@ -497,20 +550,32 @@
     }
 
     function renderBullet(bullet) {
-      const screenX = bullet.x - camera.x, screenY = bullet.y - camera.y
+      const baseX = bullet.x - camera.x
+      const baseY = bullet.y - camera.y
+      
+      renderBulletAt(bullet, baseX, baseY)
+      
+      // Wrapped copies
+      if (baseX < 0) renderBulletAt(bullet, baseX + WORLD_SIZE, baseY)
+      if (baseX > window.innerWidth) renderBulletAt(bullet, baseX - WORLD_SIZE, baseY)
+      if (baseY < 0) renderBulletAt(bullet, baseX, baseY + WORLD_SIZE)
+      if (baseY > window.innerHeight) renderBulletAt(bullet, baseX, baseY - WORLD_SIZE)
+    }
+
+    function renderBulletAt(bullet, screenX, screenY) {
       if (screenX < 0 || screenX > window.innerWidth || screenY < 0 || screenY > window.innerHeight) return
 
       // Cycling glyph for bullet
       const glyphIndex = Math.floor((BULLET_LIFETIME - bullet.life) / 15) % BULLET_GLYPHS.length
       const glyph = BULLET_GLYPHS[glyphIndex] || '●'
-      
+
       // Color shifts from yellow to orange as bullet ages
       const hue = 50 + bullet.life * 2
       ctx.fillStyle = `hsl(${hue}, 100%, 55%)`
       ctx.font = 'bold 16px "Courier New", monospace'
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
-      
+
       // Glow effect
       ctx.shadowColor = `hsl(${hue}, 100%, 50%)`
       ctx.shadowBlur = 8
@@ -634,7 +699,7 @@
       // Update and render particles
       updateParticles()
 
-      for (const asteroid of asteroids) renderAsteroid(asteroid)
+      for (const asteroid of asteroids) renderAsteroidWrapped(asteroid)
       for (const bullet of bullets) renderBullet(bullet)
       for (const ship of remoteShips.values()) renderShip(ship, false)
       if (playerId) renderShip(localShip, true)
