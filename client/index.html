@@ -127,8 +127,8 @@
     const SHIP_SIZE = 24
     const SHIP_COLLISION_RADIUS = 10
 
-    // Connection
-    const connection = geckos()
+    // Connection - use port 3001 for WebRTC data channels
+    const connection = geckos({ port: 3001 })
     let playerId = null
     
     const connectionStatus = document.getElementById('connection-status')
