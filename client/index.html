@@ -128,8 +128,14 @@
     // --- Camera ---
     const camera = { x: 0, y: 0 }
     function updateCamera() {
-      camera.x += (localShip.x - camera.x) * 0.1
-      camera.y += (localShip.y - camera.y) * 0.1
+      // Center camera on ship
+      const targetX = localShip.x - window.innerWidth / 2
+      const targetY = localShip.y - window.innerHeight / 2
+      
+      camera.x += (targetX - camera.x) * 0.1
+      camera.y += (targetY - camera.y) * 0.1
+      
+      // Clamp to world bounds
       camera.x = Math.max(0, Math.min(WORLD_SIZE - window.innerWidth, camera.x))
       camera.y = Math.max(0, Math.min(WORLD_SIZE - window.innerHeight, camera.y))
     }
@@ -222,43 +228,53 @@
     function renderAsteroid(asteroid) {
       const screenX = asteroid.x - camera.x, screenY = asteroid.y - camera.y
       if (screenX < -100 || screenX > window.innerWidth + 100 || screenY < -100 || screenY > window.innerHeight + 100) return
+
+      ctx.save()
+      ctx.translate(screenX, screenY)
       
-      ctx.save(); ctx.translate(screenX, screenY)
-      const density = asteroid.size === 'large' ? 9 : asteroid.size === 'medium' ? 7 : 5
+      const density = asteroid.size === 'large' ? 10 : asteroid.size === 'medium' ? 8 : 6
       const fontSize = asteroid.size === 'large' ? 13 : asteroid.size === 'medium' ? 10 : 8
+      const radius = asteroid.radius
       
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-      ctx.globalAlpha = asteroid.size === 'large' ? 0.95 : asteroid.size === 'medium' ? 0.85 : 0.75
-      
-      for (const vertex of asteroid.vertices) {
-        const glyph = ASTEROID_GLYPHS[Math.floor(Math.abs(vertex.x + vertex.y) % ASTEROID_GLYPHS.length)]
-        const shadeIndex = ASTEROID_GLYPHS.indexOf(glyph)
-        const lightness = 55 + ((shadeIndex >= 0 ? shadeIndex : 0) % 5) * 7
-        ctx.fillStyle = `hsl(0, 0%, ${lightness}%)`
-        ctx.font = `bold ${fontSize}px "Courier New", monospace`
-        ctx.fillText(glyph, vertex.x, vertex.y)
+      ctx.globalAlpha = asteroid.size === 'large' ? 0.9 : asteroid.size === 'medium' ? 0.8 : 0.7
+
+      // Render glyphs in a grid pattern within the asteroid radius
+      for (let y = -radius + density; y < radius; y += density) {
+        for (let x = -radius + density; x < radius; x += density) {
+          // Check if this point is inside the asteroid (approximate circle check)
+          if (x * x + y * y < radius * radius * 0.9) {
+            const glyphIndex = Math.floor((Math.abs(x) + Math.abs(y) + radius) % ASTEROID_GLYPHS.length)
+            const glyph = ASTEROID_GLYPHS[glyphIndex]
+            const shadeIndex = ASTEROID_GLYPHS.indexOf(glyph)
+            const lightness = 50 + ((shadeIndex >= 0 ? shadeIndex : 0) % 6) * 7
+            ctx.fillStyle = `hsl(0, 0%, ${lightness}%)`
+            ctx.font = `bold ${fontSize}px "Courier New", monospace`
+            ctx.fillText(glyph, x, y)
+          }
+        }
       }
-      
+
       ctx.globalAlpha = 1; ctx.restore()
     }
 
     function renderShip(ship, isLocal) {
       if (!ship.alive) return
-      
+
       const screenX = ship.x - camera.x, screenY = ship.y - camera.y
       if (screenX < -50 || screenX > window.innerWidth + 50 || screenY < -50 || screenY > window.innerHeight + 50) return
-      
+
       ctx.save(); ctx.translate(screenX, screenY); ctx.rotate(ship.angle + Math.PI / 2)
-      ctx.fillStyle = isLocal ? '#fff' : '#66f'
+      ctx.fillStyle = isLocal ? '#fff' : '#f66'
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-      
+
       const glyphs = ['▲', '◢', '◣']
       const positions = [
-        { x: 0, y: -SHIP_SIZE / 2, size: 20 },
-        { x: -SHIP_SIZE / 3, y: SHIP_SIZE / 3, size: 12, angle: -0.3 },
-        { x: SHIP_SIZE / 3, y: SHIP_SIZE / 3, size: 12, angle: 0.3 },
+        { x: 0, y: -SHIP_SIZE / 2, size: 22 },
+        { x: -SHIP_SIZE / 3, y: SHIP_SIZE / 3, size: 14, angle: -0.3 },
+        { x: SHIP_SIZE / 3, y: SHIP_SIZE / 3, size: 14, angle: 0.3 },
       ]
-      
+
       for (let i = 0; i < positions.length; i++) {
         const pos = positions[i]
         ctx.save(); ctx.translate(pos.x, pos.y)
@@ -267,13 +283,13 @@
         ctx.fillText(glyphs[i], 0, 0)
         ctx.restore()
       }
-      
+
       ctx.restore()
-      
+
       ctx.fillStyle = isLocal ? '#0f0' : '#ff0'
       ctx.font = '12px "Courier New", monospace'
       ctx.textAlign = 'center'
-      ctx.fillText(ship.name || 'Player', screenX, screenY - 30)
+      ctx.fillText(ship.name || 'Player', screenX, screenY - 35)
     }
 
     function renderBullet(bullet) {
