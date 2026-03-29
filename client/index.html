@@ -222,7 +222,7 @@
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
 
-      // Draw outline by connecting vertices
+      // Draw outline by connecting vertices (dark gray, subtle)
       ctx.beginPath()
       ctx.moveTo(centerX + asteroid.vertices[0].x, centerY + asteroid.vertices[0].y)
       for (let i = 1; i < asteroid.vertices.length; i++) {
@@ -230,7 +230,7 @@
         ctx.lineTo(centerX + v.x, centerY + v.y)
       }
       ctx.closePath()
-      ctx.strokeStyle = 'hsl(0, 0%, 55%)'
+      ctx.strokeStyle = 'hsl(0, 0%, 35%)'  // Dark gray outline
       ctx.lineWidth = 2
       ctx.stroke()
 
@@ -281,29 +281,33 @@
     }
 
     // Client-side asteroid hit detection
-    const recentHits = []
+    const hitCooldowns = new Map() // Track asteroid hit cooldowns
     
     function checkAsteroidHits() {
+      const now = Date.now()
+      
       for (const bullet of bullets) {
         for (const asteroid of asteroids) {
           const dist = Math.hypot(bullet.x - asteroid.x, bullet.y - asteroid.y)
-          if (dist < asteroid.radius * 0.8) {
-            // Check if we already hit this asteroid recently
-            const hitKey = `${asteroid.id}`
-            const alreadyHit = recentHits.some(h => h.key === hitKey && Date.now() - h.time < 200)
-            if (!alreadyHit) {
-              recentHits.push({ key: hitKey, time: Date.now() })
+          if (dist < asteroid.radius * 0.85) {
+            // Check cooldown for this asteroid
+            const lastHit = hitCooldowns.get(asteroid.id) || 0
+            if (now - lastHit > 150) { // 150ms cooldown per asteroid
+              hitCooldowns.set(asteroid.id, now)
               // Spawn hit particles
               particles.push(...createAsteroidHitParticles(asteroid.x, asteroid.y))
+              console.log('[HIT] Asteroid', asteroid.id, 'at', asteroid.x.toFixed(0), asteroid.y.toFixed(0))
             }
-            break
+            break // One hit per bullet
           }
         }
       }
       
-      // Clean old hits
-      while (recentHits.length > 0 && Date.now() - recentHits[0].time > 300) {
-        recentHits.shift()
+      // Clean old cooldowns (older than 500ms)
+      for (const [key, time] of hitCooldowns.entries()) {
+        if (now - time > 500) {
+          hitCooldowns.delete(key)
+        }
       }
     }
 
