@@ -34,6 +34,10 @@ const remoteShips = new Map<string, ShipState>()
 const asteroids: AsteroidState[] = []
 const bullets: BulletState[] = []
 
+let gameActive = false
+let timeRemaining = 0
+let leaderboard: any[] = []
+
 // --- Input ---
 const input: InputState = { ...DEFAULT_INPUT }
 let inputSeq = 0
@@ -158,10 +162,18 @@ connection.on('state', (data: any) => {
   asteroids.push(...data.asteroids)
   bullets.length = 0
   bullets.push(...data.bullets)
+  
+  // Update game state
+  gameActive = data.gameActive
+  timeRemaining = data.timeRemaining
 })
 
 connection.on('event', (event: any) => {
-  console.log('[EVENT]', event)
+  console.log('[EVENT]', event.type, event)
+  
+  if (event.type === 'game-end' && event.leaderboard) {
+    leaderboard = event.leaderboard
+  }
 })
 
 // --- Send Input Loop ---
@@ -325,13 +337,31 @@ function renderRadar() {
 }
 
 function renderHUD() {
+  const minutes = Math.floor(timeRemaining / 60000)
+  const seconds = Math.floor((timeRemaining % 60000) / 1000)
+  const timeStr = `${minutes}:${seconds.toString().padStart(2, '0')}`
+  
   hud.innerHTML = `
+    <div style="color: ${gameActive ? '#0f0' : '#f00'}; font-weight: bold;">
+      ${gameActive ? '● LIVE' : '○ WAITING'}
+    </div>
+    <div style="margin: 8px 0;">TIME: ${timeStr}</div>
     <div>SCORE: ${localShip.score.toString().padStart(6, '0')}</div>
     <div>KILLS: ${localShip.kills}</div>
     <div>DEATHS: ${localShip.deaths}</div>
     <div style="margin-top: 10px; color: #888;">
       Players: ${remoteShips.size + (playerId ? 1 : 0)}
     </div>
+    ${leaderboard.length > 0 ? `
+      <div style="margin-top: 15px; border-top: 1px solid #444; pt: 10px;">
+        <div style="color: #ff0; margin-bottom: 5px;">LEADERBOARD</div>
+        ${leaderboard.slice(0, 5).map((p, i) => `
+          <div style="font-size: 12px;">
+            ${i + 1}. ${p.name}: ${p.score} (${p.kills}K/${p.deaths}D)
+          </div>
+        `).join('')}
+      </div>
+    ` : ''}
   `
 }
 
