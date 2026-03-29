@@ -465,6 +465,10 @@ function updatePhysics() {
       const asteroid = asteroids[ai]!
       if (distance(bullet, asteroid) < asteroid.radius) {
         bulletHit = true
+        
+        // Store hit position for particle event
+        const hitX = asteroid.x
+        const hitY = asteroid.y
 
         // Split asteroid using the new varied split function
         if (asteroid.size !== 'small') {
@@ -478,6 +482,14 @@ function updatePhysics() {
         if (owner) {
           owner.ship.score += asteroid.size === 'large' ? 20 : asteroid.size === 'medium' ? 50 : 100
         }
+        
+        // Send hit particle event to all clients
+        io.emit('event', {
+          type: 'asteroid-hit',
+          x: hitX,
+          y: hitY,
+          size: asteroid.size,
+        })
 
         break
       }
