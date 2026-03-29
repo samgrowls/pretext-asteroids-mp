@@ -127,8 +127,8 @@
     const SHIP_SIZE = 24
     const SHIP_COLLISION_RADIUS = 10
 
-    // Connection - uses same port as HTTP server
-    const connection = geckos()
+    // Connection - explicitly use port 3000 (same as HTTP)
+    const connection = geckos({ port: 3000 })
     let playerId = null
     
     const connectionStatus = document.getElementById('connection-status')
