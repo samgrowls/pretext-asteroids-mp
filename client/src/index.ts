@@ -6,7 +6,7 @@ import {
 } from '@asteroids/shared'
 
 // --- Connection ---
-const connection = geckos({ url: window.location.origin, port: 3000 })
+const connection = geckos({ url: window.location.origin })
 let playerId: string | null = null
 
 const connectionStatus = document.getElementById('connection-status')!
