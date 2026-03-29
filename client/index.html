@@ -307,25 +307,31 @@
     window.addEventListener('resize', resizeCanvas)
 
     // --- Camera ---
+    let lastShipX = 0, lastShipY = 0
+    let wrapOffsetX = 0, wrapOffsetY = 0
+    
     const camera = { x: 0, y: 0 }
     function updateCamera() {
-      // Direct lock on ship center
-      camera.x = localShip.x - window.innerWidth / 2
-      camera.y = localShip.y - window.innerHeight / 2
+      // Detect world wrapping and adjust offset
+      const dx = localShip.x - lastShipX
+      const dy = localShip.y - lastShipY
+      
+      // If ship jumped more than half the world, it wrapped
+      if (dx > WORLD_SIZE * 0.5) wrapOffsetX -= WORLD_SIZE
+      if (dx < -WORLD_SIZE * 0.5) wrapOffsetX += WORLD_SIZE
+      if (dy > WORLD_SIZE * 0.5) wrapOffsetY -= WORLD_SIZE
+      if (dy < -WORLD_SIZE * 0.5) wrapOffsetY += WORLD_SIZE
+      
+      lastShipX = localShip.x
+      lastShipY = localShip.y
+      
+      // Center camera on ship with wrap offset
+      camera.x = localShip.x + wrapOffsetX - window.innerWidth / 2
+      camera.y = localShip.y + wrapOffsetY - window.innerHeight / 2
       
       // Clamp to world bounds
       camera.x = Math.max(0, Math.min(WORLD_SIZE - window.innerWidth, camera.x))
       camera.y = Math.max(0, Math.min(WORLD_SIZE - window.innerHeight, camera.y))
-    }
-    
-    // Force camera update when ship position changes from server
-    function forceCameraUpdate() {
-      if (playerId && localShip.alive) {
-        camera.x = localShip.x - window.innerWidth / 2
-        camera.y = localShip.y - window.innerHeight / 2
-        camera.x = Math.max(0, Math.min(WORLD_SIZE - window.innerWidth, camera.x))
-        camera.y = Math.max(0, Math.min(WORLD_SIZE - window.innerHeight, camera.y))
-      }
     }
 
     // --- Input Handling ---
@@ -375,13 +381,23 @@
     socket.on('state', (data) => {
       const serverShip = data.ships.find(s => s.id === playerId)
       if (serverShip) {
+        // Detect large position jumps (respawn or wrap)
+        const jumpX = Math.abs(serverShip.x - localShip.x)
+        const jumpY = Math.abs(serverShip.y - localShip.y)
+        
+        // Reset wrap tracking on large jumps (respawn)
+        if (jumpX > 500 || jumpY > 500) {
+          lastShipX = serverShip.x
+          lastShipY = serverShip.y
+          wrapOffsetX = 0
+          wrapOffsetY = 0
+        }
+        
         localShip.prevX = localShip.x; localShip.prevY = localShip.y
         localShip.x = serverShip.x; localShip.y = serverShip.y
         localShip.vx = serverShip.vx; localShip.vy = serverShip.vy
         localShip.angle = serverShip.angle; localShip.alive = serverShip.alive
         localShip.score = serverShip.score; localShip.deaths = serverShip.deaths; localShip.kills = serverShip.kills
-        // Force camera to follow immediately
-        forceCameraUpdate()
       }
 
       remoteShips.clear()
