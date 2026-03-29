@@ -534,7 +534,7 @@
       radarCtx.stroke()
 
       // Asteroids (gray dots) - relative to ship position
-      radarCtx.fillStyle = '#666'
+      radarCtx.fillStyle = '#888'
       for (const asteroid of asteroids) {
         const x = centerX + (asteroid.x - localShip.x) * scale
         const y = centerY + (asteroid.y - localShip.y) * scale
@@ -552,20 +552,26 @@
         const x = centerX + (ship.x - localShip.x) * scale
         const y = centerY + (ship.y - localShip.y) * scale
         if (x < 0 || x > size || y < 0 || y > size) continue
+        // Draw ship pointing in its actual direction
+        radarCtx.save()
+        radarCtx.translate(x, y)
+        radarCtx.rotate(ship.angle)
         radarCtx.fillStyle = '#f44'
         radarCtx.beginPath()
-        radarCtx.moveTo(x, y - 4)
-        radarCtx.lineTo(x - 3, y + 3)
-        radarCtx.lineTo(x + 3, y + 3)
+        radarCtx.moveTo(0, -4)
+        radarCtx.lineTo(-3, 3)
+        radarCtx.lineTo(3, 3)
         radarCtx.closePath()
         radarCtx.fill()
+        radarCtx.restore()
       }
 
       // Local ship (green triangle) - centered, pointing in ship's direction
       if (localShip.alive && playerId) {
         radarCtx.save()
         radarCtx.translate(centerX, centerY)
-        radarCtx.rotate(localShip.angle)
+        // Match the main render: angle + PI/2 because ▲ points up by default
+        radarCtx.rotate(localShip.angle + Math.PI / 2)
         radarCtx.fillStyle = '#4f4'
         radarCtx.beginPath()
         radarCtx.moveTo(0, -5)
