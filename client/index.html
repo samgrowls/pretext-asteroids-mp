@@ -234,17 +234,6 @@
       ctx.lineWidth = 2
       ctx.stroke()
 
-      // Render larger glyphs at vertex positions
-      for (const vertex of asteroid.vertices) {
-        const glyphIndex = Math.floor((Math.abs(vertex.x) + Math.abs(vertex.y)) % ASTEROID_GLYPHS.length)
-        const glyph = ASTEROID_GLYPHS[glyphIndex]
-        const shadeIndex = ASTEROID_GLYPHS.indexOf(glyph)
-        const lightness = 45 + ((shadeIndex >= 0 ? shadeIndex : 0) % 8) * 6
-        ctx.fillStyle = `hsl(0, 0%, ${lightness}%)`
-        ctx.font = `bold ${fontSize + 2}px "Courier New", monospace`
-        ctx.fillText(glyph, centerX + vertex.x, centerY + vertex.y)
-      }
-
       // Fill interior following the actual polygon shape (not circular)
       for (let y = -radius + density; y < radius; y += density) {
         for (let x = -radius + density; x < radius; x += density) {
@@ -286,17 +275,29 @@
     function checkAsteroidHits() {
       const now = Date.now()
       
+      // Debug: log bullet and asteroid counts
+      if (bullets.length > 0 && asteroids.length > 0 && Math.random() < 0.05) {
+        console.log('[DEBUG] Bullets:', bullets.length, 'Asteroids:', asteroids.length)
+      }
+      
       for (const bullet of bullets) {
         for (const asteroid of asteroids) {
           const dist = Math.hypot(bullet.x - asteroid.x, bullet.y - asteroid.y)
+          
+          // Debug: check close bullets
+          if (dist < asteroid.radius * 1.5 && Math.random() < 0.1) {
+            console.log('[DEBUG] Close bullet! dist:', dist.toFixed(1), 'radius:', asteroid.radius)
+          }
+          
           if (dist < asteroid.radius * 0.85) {
             // Check cooldown for this asteroid
             const lastHit = hitCooldowns.get(asteroid.id) || 0
             if (now - lastHit > 150) { // 150ms cooldown per asteroid
               hitCooldowns.set(asteroid.id, now)
               // Spawn hit particles
-              particles.push(...createAsteroidHitParticles(asteroid.x, asteroid.y))
-              console.log('[HIT] Asteroid', asteroid.id, 'at', asteroid.x.toFixed(0), asteroid.y.toFixed(0))
+              const hitParticles = createAsteroidHitParticles(asteroid.x, asteroid.y)
+              console.log('[HIT] Spawning', hitParticles.length, 'particles for asteroid', asteroid.id)
+              particles.push(...hitParticles)
             }
             break // One hit per bullet
           }
@@ -447,6 +448,11 @@
       asteroids.push(...data.asteroids)
       bullets.length = 0
       bullets.push(...data.bullets)
+      
+      // Debug: log bullet info
+      if (bullets.length > 0 && Math.random() < 0.1) {
+        console.log('[STATE] Bullets received:', bullets.length, 'First bullet:', bullets[0])
+      }
 
       gameActive = data.gameActive
       timeRemaining = data.timeRemaining
