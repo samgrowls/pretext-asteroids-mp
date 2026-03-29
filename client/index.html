@@ -222,26 +222,39 @@
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
 
-      // Render glyphs at vertex positions for organic shape
+      // Draw outline by connecting vertices
+      ctx.beginPath()
+      ctx.moveTo(centerX + asteroid.vertices[0].x, centerY + asteroid.vertices[0].y)
+      for (let i = 1; i < asteroid.vertices.length; i++) {
+        const v = asteroid.vertices[i]
+        ctx.lineTo(centerX + v.x, centerY + v.y)
+      }
+      ctx.closePath()
+      ctx.strokeStyle = 'hsl(0, 0%, 55%)'
+      ctx.lineWidth = 2
+      ctx.stroke()
+
+      // Render larger glyphs at vertex positions
       for (const vertex of asteroid.vertices) {
         const glyphIndex = Math.floor((Math.abs(vertex.x) + Math.abs(vertex.y)) % ASTEROID_GLYPHS.length)
         const glyph = ASTEROID_GLYPHS[glyphIndex]
         const shadeIndex = ASTEROID_GLYPHS.indexOf(glyph)
-        const lightness = 55 + ((shadeIndex >= 0 ? shadeIndex : 0) % 5) * 7
+        const lightness = 45 + ((shadeIndex >= 0 ? shadeIndex : 0) % 8) * 6
         ctx.fillStyle = `hsl(0, 0%, ${lightness}%)`
-        ctx.font = `bold ${fontSize}px "Courier New", monospace`
+        ctx.font = `bold ${fontSize + 2}px "Courier New", monospace`
         ctx.fillText(glyph, centerX + vertex.x, centerY + vertex.y)
       }
 
-      // Fill interior with sparse glyphs
+      // Fill interior following the actual polygon shape (not circular)
       for (let y = -radius + density; y < radius; y += density) {
         for (let x = -radius + density; x < radius; x += density) {
-          if (x * x + y * y < radius * radius * 0.85) {
+          // Check if point is inside the polygon
+          if (pointInPolygon({ x, y }, asteroid.vertices)) {
             const glyphIndex = Math.floor((Math.abs(x) + Math.abs(y) + radius) % ASTEROID_GLYPHS.length)
             const glyph = ASTEROID_GLYPHS[glyphIndex]
             const shadeIndex = ASTEROID_GLYPHS.indexOf(glyph)
-            const lightness = 50 + ((shadeIndex >= 0 ? shadeIndex : 0) % 6) * 7
-            ctx.globalAlpha = 0.7
+            const lightness = 40 + ((shadeIndex >= 0 ? shadeIndex : 0) % 7) * 6
+            ctx.globalAlpha = 0.65
             ctx.fillStyle = `hsl(0, 0%, ${lightness}%)`
             ctx.font = `bold ${fontSize}px "Courier New", monospace`
             ctx.fillText(glyph, centerX + x, centerY + y)
@@ -249,8 +262,22 @@
         }
       }
 
+      ctx.globalAlpha = 1
       asteroidCanvasCache.set(key, canvas)
       return canvas
+    }
+
+    // Point in polygon test for interior fill
+    function pointInPolygon(point, vertices) {
+      let inside = false
+      for (let i = 0, j = vertices.length - 1; i < vertices.length; j = i++) {
+        const xi = vertices[i].x, yi = vertices[i].y
+        const xj = vertices[j].x, yj = vertices[j].y
+        const intersects = ((yi > point.y) !== (yj > point.y)) &&
+          (point.x < (xj - xi) * (point.y - yi) / (yj - yi) + xi)
+        if (intersects) inside = !inside
+      }
+      return inside
     }
 
     // Client-side asteroid hit detection
