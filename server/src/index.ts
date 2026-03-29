@@ -79,41 +79,43 @@ function createAsteroid(x?: number, y?: number, size?: 'large' | 'medium' | 'sma
   const finalSize = size ?? (Math.random() > 0.6 ? 'large' : Math.random() > 0.3 ? 'medium' : 'small')
   const baseRadius = finalSize === 'large' ? 50 : finalSize === 'medium' ? 30 : 18
   
-  // More varied vertex count for irregular shapes
+  // Highly varied vertex count for very irregular shapes
   const vertexCount = finalSize === 'large' 
-    ? 8 + Math.floor(Math.random() * 6)  // 8-13 vertices
+    ? 6 + Math.floor(Math.random() * 8)   // 6-13 vertices
     : finalSize === 'medium' 
-      ? 6 + Math.floor(Math.random() * 5)  // 6-10 vertices
-      : 5 + Math.floor(Math.random() * 4)  // 5-8 vertices
+      ? 5 + Math.floor(Math.random() * 6)  // 5-10 vertices
+      : 4 + Math.floor(Math.random() * 4)  // 4-7 vertices
 
   const vertices: { x: number; y: number }[] = []
   const angles: number[] = []
   
-  // Create irregular angle distribution (not evenly spaced)
+  // Create VERY irregular angle distribution
   let currentAngle = Math.random() * Math.PI * 2
   for (let i = 0; i < vertexCount; i++) {
     angles.push(currentAngle)
-    // Vary the angle gap significantly (0.3 to 1.0 radians)
-    currentAngle += 0.3 + Math.random() * 0.7
+    // Wildly vary the angle gap (0.2 to 1.2 radians) - creates clumps and gaps
+    currentAngle += 0.2 + Math.random() * 1.0
   }
   
-  // Add some extra vertices for really irregular shapes
-  if (Math.random() > 0.5) {
-    const extraAngle = Math.random() * Math.PI * 2
-    angles.push(extraAngle)
-    angles.sort((a, b) => a - b)
+  // Add 1-3 extra random vertices for really jagged shapes
+  const extraVertices = Math.floor(Math.random() * 3)
+  for (let i = 0; i < extraVertices; i++) {
+    angles.push(Math.random() * Math.PI * 2)
   }
+  angles.sort((a, b) => a - b)
 
-  // Create vertices with extreme radius variation
+  // Create vertices with EXTREME radius variation
   for (let i = 0; i < angles.length; i++) {
     const angle = angles[i]!
-    // More extreme variance: 0.5 to 1.4 (creates protrusions and indentations)
-    const variance = 0.5 + Math.random() * 0.9
-    // Add some flat sides by clustering some vertices
-    const flatModifier = Math.random() > 0.8 ? 0.85 : 1.0
+    // Extreme variance: 0.3 to 1.6 (creates deep indentations and sharp protrusions)
+    const variance = 0.3 + Math.random() * 1.3
+    // Occasional very flat sides
+    const flatModifier = Math.random() > 0.75 ? 0.7 : 1.0
+    // Occasional sharp spike
+    const spikeModifier = Math.random() > 0.85 ? 1.5 : 1.0
     vertices.push({
-      x: Math.cos(angle) * baseRadius * variance * flatModifier,
-      y: Math.sin(angle) * baseRadius * variance * flatModifier,
+      x: Math.cos(angle) * baseRadius * variance * flatModifier * spikeModifier,
+      y: Math.sin(angle) * baseRadius * variance * flatModifier * spikeModifier,
     })
   }
 

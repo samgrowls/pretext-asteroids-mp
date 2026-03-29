@@ -254,20 +254,28 @@
     }
 
     // Client-side asteroid hit detection
+    const bulletHitTracker = new Set()
+    
     function checkAsteroidHits() {
       const now = Date.now()
       for (const bullet of bullets) {
+        // Skip if we already processed this bullet this frame
+        if (bulletHitTracker.has(bullet.id)) continue
+        
         for (const asteroid of asteroids) {
           const dist = Math.hypot(bullet.x - asteroid.x, bullet.y - asteroid.y)
-          if (dist < asteroid.radius) {
-            const hitKey = `${asteroid.id}-${bullet.id}`
-            const lastHit = lastAsteroidHit.get(hitKey) || 0
-            if (now - lastHit > 100) { // 100ms cooldown per hit
-              lastAsteroidHit.set(hitKey, now)
-              particles.push(...createAsteroidHitParticles(asteroid.x, asteroid.y))
-            }
+          if (dist < asteroid.radius * 0.9) {
+            bulletHitTracker.add(bullet.id)
+            // Spawn hit particles
+            particles.push(...createAsteroidHitParticles(asteroid.x, asteroid.y))
+            break
           }
         }
+      }
+      
+      // Clear tracker periodically
+      if (bulletHitTracker.size > 100) {
+        bulletHitTracker.clear()
       }
     }
 
@@ -343,20 +351,27 @@
     }
 
     // --- Input Handling ---
+    let fireCooldown = 0
+    
     document.addEventListener('keydown', (e) => {
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault()
       keysDown.add(e.code)
       input.thrust = keysDown.has('ArrowUp') || keysDown.has('KeyW')
       input.left = keysDown.has('ArrowLeft') || keysDown.has('KeyA')
       input.right = keysDown.has('ArrowRight') || keysDown.has('KeyD')
-      if (e.code === 'Space' && !fireHeld) { input.fire = true; fireHeld = true }
+      if (e.code === 'Space') {
+        fireHeld = true
+      }
     })
     document.addEventListener('keyup', (e) => {
       keysDown.delete(e.code)
       input.thrust = keysDown.has('ArrowUp') || keysDown.has('KeyW')
       input.left = keysDown.has('ArrowLeft') || keysDown.has('KeyA')
       input.right = keysDown.has('ArrowRight') || keysDown.has('KeyD')
-      if (e.code === 'Space') fireHeld = false
+      if (e.code === 'Space') {
+        fireHeld = false
+        input.fire = false
+      }
     })
 
     // --- Join UI ---
@@ -422,6 +437,16 @@
     // --- Send Input (60 TPS) ---
     setInterval(() => {
       if (!playerId) return
+      
+      // Auto-fire when space is held (with cooldown)
+      if (fireHeld && fireCooldown <= 0) {
+        input.fire = true
+        fireCooldown = 8 // Match server fire rate
+      } else if (fireCooldown > 0) {
+        fireCooldown--
+        input.fire = false
+      }
+      
       socket.emit('input', {
         seq: inputSeq++,
         thrust: input.thrust,
