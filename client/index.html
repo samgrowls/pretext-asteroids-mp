@@ -75,6 +75,84 @@
     const SHIP_SIZE = 24
     const SHIP_COLLISION_RADIUS = 10
     const ASTEROID_GLYPHS = '▓▒░█▀▄■●◐◑◒◓⬡⬢◆◇○●'
+    const PARTICLE_GLYPHS = '·•◦○●'
+    const EXPLOSION_GLYPHS = '✦✧★☆✶✷✸✹✺✻✼✽'
+    const PARTICLE_LIFETIME = 25
+    const PARTICLE_DECAY = 0.92
+
+    // --- Particles ---
+    const particles = []
+    
+    function angleToVector(angle) {
+      return { x: Math.cos(angle), y: Math.sin(angle) }
+    }
+    
+    function createAfterburnerParticle(ship) {
+      const thrustDir = angleToVector(ship.angle)
+      const baseX = ship.x - thrustDir.x * SHIP_SIZE * 0.6
+      const baseY = ship.y - thrustDir.y * SHIP_SIZE * 0.6
+      const spread = 0.3
+      
+      return {
+        x: baseX + (Math.random() - 0.5) * spread * 2,
+        y: baseY + (Math.random() - 0.5) * spread * 2,
+        vx: ship.vx - thrustDir.x * (2 + Math.random() * 2) + (Math.random() - 0.5),
+        vy: ship.vy - thrustDir.y * (2 + Math.random() * 2) + (Math.random() - 0.5),
+        glyph: PARTICLE_GLYPHS[Math.floor(Math.random() * PARTICLE_GLYPHS.length)],
+        life: PARTICLE_LIFETIME,
+        maxLife: PARTICLE_LIFETIME,
+        size: 8 + Math.random() * 6,
+        color: `hsl(${20 + Math.random() * 20}, 100%, ${50 + Math.random() * 20}%)`,
+      }
+    }
+    
+    function createExplosionParticles(x, y, count, glyphSet) {
+      const result = []
+      for (let i = 0; i < count; i++) {
+        const angle = Math.random() * Math.PI * 2
+        const speed = 2 + Math.random() * 6
+        result.push({
+          x, y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          glyph: glyphSet[Math.floor(Math.random() * glyphSet.length)],
+          life: 20 + Math.random() * 20,
+          maxLife: 40,
+          size: 10 + Math.random() * 10,
+          color: `hsl(${Math.random() * 60}, 100%, ${50 + Math.random() * 20}%)`,
+        })
+      }
+      return result
+    }
+    
+    function updateParticles() {
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i]
+        p.x += p.vx
+        p.y += p.vy
+        p.vx *= PARTICLE_DECAY
+        p.vy *= PARTICLE_DECAY
+        p.life--
+        if (p.life <= 0) {
+          particles.splice(i, 1)
+        }
+      }
+    }
+    
+    function renderParticles() {
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      
+      for (const p of particles) {
+        const lifeRatio = p.life / p.maxLife
+        ctx.globalAlpha = lifeRatio
+        ctx.fillStyle = p.color
+        ctx.font = `${p.size}px "Courier New", monospace`
+        ctx.fillText(p.glyph, p.x - camera.x, p.y - camera.y)
+      }
+      
+      ctx.globalAlpha = 1
+    }
 
     // --- Asteroid Canvas Cache ---
     const asteroidCanvasCache = new Map()
@@ -260,6 +338,14 @@
       console.log('[EVENT]', event.type, event)
       if (event.type === 'game-end' && event.leaderboard) leaderboard = event.leaderboard
       if (event.type === 'game-start') console.log('[GAME STARTED] Duration:', event.duration)
+      
+      // Spawn explosion particles on player death
+      if (event.type === 'player-died') {
+        const deadShip = event.playerId === playerId ? localShip : remoteShips.get(event.playerId)
+        if (deadShip) {
+          particles.push(...createExplosionParticles(deadShip.x, deadShip.y, 30, EXPLOSION_GLYPHS))
+        }
+      }
     })
 
     // --- Send Input (60 TPS) ---
@@ -393,24 +479,39 @@
     function gameLoop(currentTime) {
       const dt = currentTime - lastTime
       lastTime = currentTime
-      
+
       ctx.fillStyle = '#000'
       ctx.fillRect(0, 0, window.innerWidth, window.innerHeight)
-      
-      if (playerId && localShip.alive) updateCamera()
-      
+
+      if (playerId && localShip.alive) {
+        updateCamera()
+        
+        // Add thruster particles when thrusting
+        if (input.thrust && localShip.alive) {
+          for (let i = 0; i < 2; i++) {
+            particles.push(createAfterburnerParticle(localShip))
+          }
+        }
+      }
+
+      // Update and render particles
+      updateParticles()
+
       for (const asteroid of asteroids) renderAsteroid(asteroid)
       for (const bullet of bullets) renderBullet(bullet)
       for (const ship of remoteShips.values()) renderShip(ship, false)
       if (playerId) renderShip(localShip, true)
       
+      // Render particles on top
+      renderParticles()
+
       renderRadar()
       renderHUD()
-      
+
       requestAnimationFrame(gameLoop)
     }
     requestAnimationFrame(gameLoop)
-    
+
     console.log('🚀 Asteroids MP client starting...')
   </script>
 </body>
