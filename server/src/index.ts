@@ -190,14 +190,15 @@ function startGame() {
   gameActive = true
   gameStartTime = Date.now()
   winners = []
-  
+  console.log('[GAME STARTED] Players:', players.size)
+
   // Reset all scores
   for (const player of players.values()) {
     player.ship.score = 0
     player.ship.kills = 0
     player.ship.deaths = 0
   }
-  
+
   broadcast({ type: 'game-start', duration: gameMode.duration })
 }
 
@@ -281,11 +282,13 @@ io.onConnection((channel) => {
     // Broadcast join event
     // @ts-ignore - Geckos.io type quirks
     broadcast({ type: 'player-joined', playerId, name: player.name })
-    
+
     console.log(`  Joined as: ${player.name} at (${player.ship.x.toFixed(0)}, ${player.ship.y.toFixed(0)})`)
-    
+    console.log(`  Total players: ${players.size}, gameActive: ${gameActive}`)
+
     // Start game if not running and we have players
     if (!gameActive && players.size >= 1) {
+      console.log('[AUTO-START] Starting game with', players.size, 'players')
       startGame()
     }
   })

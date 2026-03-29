@@ -223,6 +223,7 @@
     })
     
     connection.on('state', (data) => {
+      console.log('[STATE] gameActive:', data.gameActive, 'timeRemaining:', data.timeRemaining, 'ships:', data.ships.length)
       const serverShip = data.ships.find(s => s.id === playerId)
       if (serverShip) {
         localShip.prevX = localShip.x; localShip.prevY = localShip.y
@@ -241,6 +242,7 @@
     connection.on('event', (event) => {
       console.log('[EVENT]', event.type, event)
       if (event.type === 'game-end' && event.leaderboard) leaderboard = event.leaderboard
+      if (event.type === 'game-start') console.log('[GAME STARTED] Duration:', event.duration)
     })
     
     // Send input
