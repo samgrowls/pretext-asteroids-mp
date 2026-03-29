@@ -77,36 +77,56 @@ function distance(a: { x: number; y: number }, b: { x: number; y: number }): num
 // --- Asteroid Generation ---
 function createAsteroid(x?: number, y?: number, size?: 'large' | 'medium' | 'small'): AsteroidState {
   const finalSize = size ?? (Math.random() > 0.6 ? 'large' : Math.random() > 0.3 ? 'medium' : 'small')
-  const radius = finalSize === 'large' ? 50 : finalSize === 'medium' ? 30 : 18
-  const vertexCount = finalSize === 'large' ? 12 : finalSize === 'medium' ? 9 : 7
+  const baseRadius = finalSize === 'large' ? 50 : finalSize === 'medium' ? 30 : 18
   
+  // More varied vertex count for irregular shapes
+  const vertexCount = finalSize === 'large' 
+    ? 8 + Math.floor(Math.random() * 6)  // 8-13 vertices
+    : finalSize === 'medium' 
+      ? 6 + Math.floor(Math.random() * 5)  // 6-10 vertices
+      : 5 + Math.floor(Math.random() * 4)  // 5-8 vertices
+
   const vertices: { x: number; y: number }[] = []
   const angles: number[] = []
-  for (let i = 0; i < vertexCount; i++) {
-    const baseAngle = (i / vertexCount) * Math.PI * 2
-    angles.push(baseAngle + (Math.random() - 0.5) * 0.3)
-  }
-  angles.sort((a, b) => a - b)
   
+  // Create irregular angle distribution (not evenly spaced)
+  let currentAngle = Math.random() * Math.PI * 2
   for (let i = 0; i < vertexCount; i++) {
+    angles.push(currentAngle)
+    // Vary the angle gap significantly (0.3 to 1.0 radians)
+    currentAngle += 0.3 + Math.random() * 0.7
+  }
+  
+  // Add some extra vertices for really irregular shapes
+  if (Math.random() > 0.5) {
+    const extraAngle = Math.random() * Math.PI * 2
+    angles.push(extraAngle)
+    angles.sort((a, b) => a - b)
+  }
+
+  // Create vertices with extreme radius variation
+  for (let i = 0; i < angles.length; i++) {
     const angle = angles[i]!
-    const variance = 0.75 + Math.random() * 0.5
+    // More extreme variance: 0.5 to 1.4 (creates protrusions and indentations)
+    const variance = 0.5 + Math.random() * 0.9
+    // Add some flat sides by clustering some vertices
+    const flatModifier = Math.random() > 0.8 ? 0.85 : 1.0
     vertices.push({
-      x: Math.cos(angle) * radius * variance,
-      y: Math.sin(angle) * radius * variance,
+      x: Math.cos(angle) * baseRadius * variance * flatModifier,
+      y: Math.sin(angle) * baseRadius * variance * flatModifier,
     })
   }
-  
+
   const angle = Math.random() * Math.PI * 2
   const speed = ASTEROID_SPEED * (finalSize === 'large' ? 0.6 : finalSize === 'medium' ? 0.9 : 1.2)
-  
+
   return {
     id: `a-${Date.now()}-${Math.random()}`,
     x: x ?? Math.random() * WORLD_SIZE,
     y: y ?? Math.random() * WORLD_SIZE,
     vx: Math.cos(angle) * speed,
     vy: Math.sin(angle) * speed,
-    radius,
+    radius: baseRadius,
     size: finalSize,
     vertices,
   }

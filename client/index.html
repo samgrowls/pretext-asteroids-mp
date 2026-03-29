@@ -201,27 +201,28 @@
 
     // --- Asteroid Canvas Cache ---
     const asteroidCanvasCache = new Map()
-    
+    const lastAsteroidHit = new Map() // Track hits to avoid spam
+
     function getAsteroidCanvas(asteroid) {
       const key = `${asteroid.size}-${asteroid.id}`
       if (asteroidCanvasCache.has(key)) return asteroidCanvasCache.get(key)
-      
+
       const radius = asteroid.radius
       const dim = (radius + 2) * 2
       const canvas = document.createElement('canvas')
       canvas.width = dim
       canvas.height = dim
       const ctx = canvas.getContext('2d')
-      
+
       const centerX = radius + 2
       const centerY = radius + 2
       const density = asteroid.size === 'large' ? 9 : asteroid.size === 'medium' ? 7 : 5
       const fontSize = asteroid.size === 'large' ? 13 : asteroid.size === 'medium' ? 10 : 8
-      
+
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
-      
-      // Render glyphs at vertex positions
+
+      // Render glyphs at vertex positions for organic shape
       for (const vertex of asteroid.vertices) {
         const glyphIndex = Math.floor((Math.abs(vertex.x) + Math.abs(vertex.y)) % ASTEROID_GLYPHS.length)
         const glyph = ASTEROID_GLYPHS[glyphIndex]
@@ -231,8 +232,8 @@
         ctx.font = `bold ${fontSize}px "Courier New", monospace`
         ctx.fillText(glyph, centerX + vertex.x, centerY + vertex.y)
       }
-      
-      // Also fill interior with sparse glyphs
+
+      // Fill interior with sparse glyphs
       for (let y = -radius + density; y < radius; y += density) {
         for (let x = -radius + density; x < radius; x += density) {
           if (x * x + y * y < radius * radius * 0.85) {
@@ -247,9 +248,27 @@
           }
         }
       }
-      
+
       asteroidCanvasCache.set(key, canvas)
       return canvas
+    }
+
+    // Client-side asteroid hit detection
+    function checkAsteroidHits() {
+      const now = Date.now()
+      for (const bullet of bullets) {
+        for (const asteroid of asteroids) {
+          const dist = Math.hypot(bullet.x - asteroid.x, bullet.y - asteroid.y)
+          if (dist < asteroid.radius) {
+            const hitKey = `${asteroid.id}-${bullet.id}`
+            const lastHit = lastAsteroidHit.get(hitKey) || 0
+            if (now - lastHit > 100) { // 100ms cooldown per hit
+              lastAsteroidHit.set(hitKey, now)
+              particles.push(...createAsteroidHitParticles(asteroid.x, asteroid.y))
+            }
+          }
+        }
+      }
     }
 
     // --- Socket.io Connection ---
@@ -304,13 +323,23 @@
     // --- Camera ---
     const camera = { x: 0, y: 0 }
     function updateCamera() {
-      // Lock camera directly to ship center (no lerp = no drift)
+      // Direct lock on ship center
       camera.x = localShip.x - window.innerWidth / 2
       camera.y = localShip.y - window.innerHeight / 2
       
       // Clamp to world bounds
       camera.x = Math.max(0, Math.min(WORLD_SIZE - window.innerWidth, camera.x))
       camera.y = Math.max(0, Math.min(WORLD_SIZE - window.innerHeight, camera.y))
+    }
+    
+    // Force camera update when ship position changes from server
+    function forceCameraUpdate() {
+      if (playerId && localShip.alive) {
+        camera.x = localShip.x - window.innerWidth / 2
+        camera.y = localShip.y - window.innerHeight / 2
+        camera.x = Math.max(0, Math.min(WORLD_SIZE - window.innerWidth, camera.x))
+        camera.y = Math.max(0, Math.min(WORLD_SIZE - window.innerHeight, camera.y))
+      }
     }
 
     // --- Input Handling ---
@@ -351,8 +380,6 @@
     })
 
     socket.on('state', (data) => {
-      console.log('[STATE] gameActive:', data.gameActive, 'timeRemaining:', data.timeRemaining, 'ships:', data.ships.length)
-      
       const serverShip = data.ships.find(s => s.id === playerId)
       if (serverShip) {
         localShip.prevX = localShip.x; localShip.prevY = localShip.y
@@ -360,18 +387,20 @@
         localShip.vx = serverShip.vx; localShip.vy = serverShip.vy
         localShip.angle = serverShip.angle; localShip.alive = serverShip.alive
         localShip.score = serverShip.score; localShip.deaths = serverShip.deaths; localShip.kills = serverShip.kills
+        // Force camera to follow immediately
+        forceCameraUpdate()
       }
-      
+
       remoteShips.clear()
       for (const ship of data.ships) {
         if (ship.id !== playerId) remoteShips.set(ship.id, ship)
       }
-      
+
       asteroids.length = 0
       asteroids.push(...data.asteroids)
       bullets.length = 0
       bullets.push(...data.bullets)
-      
+
       gameActive = data.gameActive
       timeRemaining = data.timeRemaining
     })
@@ -539,7 +568,7 @@
 
       if (playerId && localShip.alive) {
         updateCamera()
-        
+
         // Add thruster particles when thrusting (more at full thrust)
         if (input.thrust && localShip.alive) {
           const speed = Math.hypot(localShip.vx, localShip.vy)
@@ -554,6 +583,9 @@
         particles.push(createBulletTrailParticle(bullet))
       }
 
+      // Check for asteroid hits and spawn particles
+      checkAsteroidHits()
+
       // Update and render particles
       updateParticles()
 
@@ -561,7 +593,7 @@
       for (const bullet of bullets) renderBullet(bullet)
       for (const ship of remoteShips.values()) renderShip(ship, false)
       if (playerId) renderShip(localShip, true)
-      
+
       // Render particles on top
       renderParticles()
 
