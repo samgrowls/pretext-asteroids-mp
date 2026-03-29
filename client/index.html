@@ -520,7 +520,7 @@
 
     function renderRadar() {
       const size = 180, centerX = size / 2, centerY = size / 2
-      const scale = size / WORLD_SIZE  // 180/4000 = 0.045
+      const scale = size / WORLD_SIZE * 3  // Zoomed in view (3x closer)
       
       radarCtx.clearRect(0, 0, size, size)
 
@@ -533,11 +533,20 @@
       radarCtx.lineWidth = 2
       radarCtx.stroke()
 
-      // Asteroids (gray dots)
+      // Save context for rotation
+      radarCtx.save()
+      radarCtx.translate(centerX, centerY)
+      // Rotate opposite to ship angle so ship always points up
+      radarCtx.rotate(-localShip.angle + Math.PI / 2)
+      radarCtx.translate(-centerX, -centerY)
+
+      // Asteroids (gray dots) - relative to ship position
       radarCtx.fillStyle = '#666'
       for (const asteroid of asteroids) {
-        const x = centerX + (asteroid.x - WORLD_SIZE/2) * scale
-        const y = centerY + (asteroid.y - WORLD_SIZE/2) * scale
+        const x = centerX + (asteroid.x - localShip.x) * scale
+        const y = centerY + (asteroid.y - localShip.y) * scale
+        // Only draw if within radar bounds
+        if (x < 0 || x > size || y < 0 || y > size) continue
         const dotSize = asteroid.size === 'large' ? 2.5 : asteroid.size === 'medium' ? 2 : 1.5
         radarCtx.beginPath()
         radarCtx.arc(x, y, dotSize, 0, Math.PI * 2)
@@ -547,8 +556,9 @@
       // Remote ships (red triangles)
       for (const ship of remoteShips.values()) {
         if (!ship.alive) continue
-        const x = centerX + (ship.x - WORLD_SIZE/2) * scale
-        const y = centerY + (ship.y - WORLD_SIZE/2) * scale
+        const x = centerX + (ship.x - localShip.x) * scale
+        const y = centerY + (ship.y - localShip.y) * scale
+        if (x < 0 || x > size || y < 0 || y > size) continue
         radarCtx.fillStyle = '#f44'
         radarCtx.beginPath()
         radarCtx.moveTo(x, y - 4)
@@ -558,15 +568,15 @@
         radarCtx.fill()
       }
 
-      // Local ship (green triangle)
+      radarCtx.restore()
+
+      // Local ship (green triangle) - always centered, pointing up
       if (localShip.alive && playerId) {
-        const x = centerX + (localShip.x - WORLD_SIZE/2) * scale
-        const y = centerY + (localShip.y - WORLD_SIZE/2) * scale
         radarCtx.fillStyle = '#4f4'
         radarCtx.beginPath()
-        radarCtx.moveTo(x, y - 4)
-        radarCtx.lineTo(x - 3, y + 3)
-        radarCtx.lineTo(x + 3, y + 3)
+        radarCtx.moveTo(centerX, centerY - 5)
+        radarCtx.lineTo(centerX - 4, centerY + 4)
+        radarCtx.lineTo(centerX + 4, centerY + 4)
         radarCtx.closePath()
         radarCtx.fill()
       }
