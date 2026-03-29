@@ -307,31 +307,16 @@
     window.addEventListener('resize', resizeCanvas)
 
     // --- Camera ---
-    let lastShipX = 0, lastShipY = 0
-    let wrapOffsetX = 0, wrapOffsetY = 0
-    
     const camera = { x: 0, y: 0 }
     function updateCamera() {
-      // Detect world wrapping and adjust offset
-      const dx = localShip.x - lastShipX
-      const dy = localShip.y - lastShipY
+      // Directly center camera on ship (no lerp, no wrap tracking)
+      camera.x = localShip.x - window.innerWidth / 2
+      camera.y = localShip.y - window.innerHeight / 2
       
-      // If ship jumped more than half the world, it wrapped
-      if (dx > WORLD_SIZE * 0.5) wrapOffsetX -= WORLD_SIZE
-      if (dx < -WORLD_SIZE * 0.5) wrapOffsetX += WORLD_SIZE
-      if (dy > WORLD_SIZE * 0.5) wrapOffsetY -= WORLD_SIZE
-      if (dy < -WORLD_SIZE * 0.5) wrapOffsetY += WORLD_SIZE
-      
-      lastShipX = localShip.x
-      lastShipY = localShip.y
-      
-      // Center camera on ship with wrap offset
-      camera.x = localShip.x + wrapOffsetX - window.innerWidth / 2
-      camera.y = localShip.y + wrapOffsetY - window.innerHeight / 2
-      
-      // Clamp to world bounds
-      camera.x = Math.max(0, Math.min(WORLD_SIZE - window.innerWidth, camera.x))
-      camera.y = Math.max(0, Math.min(WORLD_SIZE - window.innerHeight, camera.y))
+      // Soft clamping - allow camera to show edge of world
+      const margin = 100
+      camera.x = Math.max(-margin, Math.min(WORLD_SIZE - window.innerWidth + margin, camera.x))
+      camera.y = Math.max(-margin, Math.min(WORLD_SIZE - window.innerHeight + margin, camera.y))
     }
 
     // --- Input Handling ---
