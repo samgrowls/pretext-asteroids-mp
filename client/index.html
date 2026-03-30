@@ -330,6 +330,18 @@
     // --- Input Handling ---
     let fireCooldown = 0
     
+    // Reset input when window loses focus (tab switching)
+    window.addEventListener('blur', () => {
+      keysDown.clear()
+      input.thrust = false
+      input.left = false
+      input.right = false
+      input.fire = false
+      input.teleport = false
+      fireHeld = false
+      fireCooldown = 0
+    })
+    
     document.addEventListener('keydown', (e) => {
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault()
       keysDown.add(e.code)
