@@ -310,7 +310,7 @@
     // --- Camera ---
     const camera = { x: 0, y: 0 }
     function updateCamera() {
-      // Directly center camera on ship - no clamping, ship always centered
+      // Directly center camera on ship - no clamping at all
       camera.x = localShip.x - window.innerWidth / 2
       camera.y = localShip.y - window.innerHeight / 2
     }
@@ -462,36 +462,29 @@
       ctx.restore()
     }
 
-    // Render asteroid with world wrapping
-    function renderAsteroidWrapped(asteroid) {
-      const baseX = asteroid.x - camera.x
-      const baseY = asteroid.y - camera.y
+    // Get the screen position of an object, wrapped to nearest visible position
+    function getWrappedScreenPos(worldX, worldY) {
+      let screenX = worldX - camera.x
+      let screenY = worldY - camera.y
       
-      // Render at base position
-      renderAsteroidAt(asteroid, baseX, baseY)
+      // Wrap to nearest visible position
+      while (screenX < -WORLD_SIZE / 2) screenX += WORLD_SIZE
+      while (screenX > WORLD_SIZE / 2) screenX -= WORLD_SIZE
+      while (screenY < -WORLD_SIZE / 2) screenY += WORLD_SIZE
+      while (screenY > WORLD_SIZE / 2) screenY -= WORLD_SIZE
       
-      // Render wrapped copies at edges
-      // Left edge → also render on right
-      if (baseX < -100) renderAsteroidAt(asteroid, baseX + WORLD_SIZE, baseY)
-      // Right edge → also render on left
-      if (baseX > window.innerWidth + 100) renderAsteroidAt(asteroid, baseX - WORLD_SIZE, baseY)
-      // Top edge → also render on bottom
-      if (baseY < -100) renderAsteroidAt(asteroid, baseX, baseY + WORLD_SIZE)
-      // Bottom edge → also render on top
-      if (baseY > window.innerHeight + 100) renderAsteroidAt(asteroid, baseX, baseY - WORLD_SIZE)
-      
-      // Corner cases (render in diagonal corners too)
-      if (baseX < -100 && baseY < -100) renderAsteroidAt(asteroid, baseX + WORLD_SIZE, baseY + WORLD_SIZE)
-      if (baseX > window.innerWidth + 100 && baseY < -100) renderAsteroidAt(asteroid, baseX - WORLD_SIZE, baseY + WORLD_SIZE)
-      if (baseX < -100 && baseY > window.innerHeight + 100) renderAsteroidAt(asteroid, baseX + WORLD_SIZE, baseY - WORLD_SIZE)
-      if (baseX > window.innerWidth + 100 && baseY > window.innerHeight + 100) renderAsteroidAt(asteroid, baseX - WORLD_SIZE, baseY - WORLD_SIZE)
+      return { x: screenX, y: screenY }
     }
 
-    function renderAsteroidAt(asteroid, screenX, screenY) {
-      if (screenX < -100 || screenX > window.innerWidth + 100 || screenY < -100 || screenY > window.innerHeight + 100) return
+    // Render asteroid with seamless world wrapping
+    function renderAsteroidWrapped(asteroid) {
+      const pos = getWrappedScreenPos(asteroid.x, asteroid.y)
+      
+      // Cull if off screen
+      if (pos.x < -100 || pos.x > window.innerWidth + 100 || pos.y < -100 || pos.y > window.innerHeight + 100) return
 
       ctx.save()
-      ctx.translate(screenX, screenY)
+      ctx.translate(pos.x, pos.y)
       ctx.rotate(asteroid.rotation)
       
       const canvas = getAsteroidCanvas(asteroid)
@@ -502,26 +495,16 @@
       ctx.restore()
     }
 
-    function renderShip(ship, isLocal) {
+    // Render ship with seamless world wrapping
+    function renderShipWrapped(ship, isLocal) {
       if (!ship.alive) return
-
-      const baseX = ship.x - camera.x
-      const baseY = ship.y - camera.y
       
-      // Render at base position
-      renderShipAt(ship, isLocal, baseX, baseY)
+      const pos = getWrappedScreenPos(ship.x, ship.y)
       
-      // Render wrapped copies at edges
-      if (baseX < -50) renderShipAt(ship, isLocal, baseX + WORLD_SIZE, baseY)
-      if (baseX > window.innerWidth + 50) renderShipAt(ship, isLocal, baseX - WORLD_SIZE, baseY)
-      if (baseY < -50) renderShipAt(ship, isLocal, baseX, baseY + WORLD_SIZE)
-      if (baseY > window.innerHeight + 50) renderShipAt(ship, isLocal, baseX, baseY - WORLD_SIZE)
-    }
+      // Cull if off screen
+      if (pos.x < -50 || pos.x > window.innerWidth + 50 || pos.y < -50 || pos.y > window.innerHeight + 50) return
 
-    function renderShipAt(ship, isLocal, screenX, screenY) {
-      if (screenX < -50 || screenX > window.innerWidth + 50 || screenY < -50 || screenY > window.innerHeight + 50) return
-
-      ctx.save(); ctx.translate(screenX, screenY); ctx.rotate(ship.angle + Math.PI / 2)
+      ctx.save(); ctx.translate(pos.x, pos.y); ctx.rotate(ship.angle + Math.PI / 2)
       ctx.fillStyle = isLocal ? '#fff' : '#f66'
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
 
@@ -546,24 +529,15 @@
       ctx.fillStyle = isLocal ? '#0f0' : '#ff0'
       ctx.font = '12px "Courier New", monospace'
       ctx.textAlign = 'center'
-      ctx.fillText(ship.name || 'Player', screenX, screenY - 35)
+      ctx.fillText(ship.name || 'Player', pos.x, pos.y - 35)
     }
 
-    function renderBullet(bullet) {
-      const baseX = bullet.x - camera.x
-      const baseY = bullet.y - camera.y
+    // Render bullet with seamless world wrapping
+    function renderBulletWrapped(bullet) {
+      const pos = getWrappedScreenPos(bullet.x, bullet.y)
       
-      renderBulletAt(bullet, baseX, baseY)
-      
-      // Wrapped copies
-      if (baseX < 0) renderBulletAt(bullet, baseX + WORLD_SIZE, baseY)
-      if (baseX > window.innerWidth) renderBulletAt(bullet, baseX - WORLD_SIZE, baseY)
-      if (baseY < 0) renderBulletAt(bullet, baseX, baseY + WORLD_SIZE)
-      if (baseY > window.innerHeight) renderBulletAt(bullet, baseX, baseY - WORLD_SIZE)
-    }
-
-    function renderBulletAt(bullet, screenX, screenY) {
-      if (screenX < 0 || screenX > window.innerWidth || screenY < 0 || screenY > window.innerHeight) return
+      // Cull if off screen
+      if (pos.x < 0 || pos.x > window.innerWidth || pos.y < 0 || pos.y > window.innerHeight) return
 
       // Cycling glyph for bullet
       const glyphIndex = Math.floor((BULLET_LIFETIME - bullet.life) / 15) % BULLET_GLYPHS.length
@@ -579,7 +553,7 @@
       // Glow effect
       ctx.shadowColor = `hsl(${hue}, 100%, 50%)`
       ctx.shadowBlur = 8
-      ctx.fillText(glyph, screenX, screenY)
+      ctx.fillText(glyph, pos.x, pos.y)
       ctx.shadowBlur = 0
     }
 
@@ -700,9 +674,9 @@
       updateParticles()
 
       for (const asteroid of asteroids) renderAsteroidWrapped(asteroid)
-      for (const bullet of bullets) renderBullet(bullet)
-      for (const ship of remoteShips.values()) renderShip(ship, false)
-      if (playerId) renderShip(localShip, true)
+      for (const bullet of bullets) renderBulletWrapped(bullet)
+      for (const ship of remoteShips.values()) renderShipWrapped(ship, false)
+      if (playerId) renderShipWrapped(localShip, true)
 
       // Render particles on top
       renderParticles()
