@@ -572,11 +572,12 @@
       radarCtx.lineWidth = 2
       radarCtx.stroke()
 
-      // Asteroids (gray dots) - relative to ship position
+      // Asteroids (gray dots) - wrapped to nearest position
       radarCtx.fillStyle = '#888'
       for (const asteroid of asteroids) {
-        const x = centerX + (asteroid.x - localShip.x) * scale
-        const y = centerY + (asteroid.y - localShip.y) * scale
+        const pos = getWrappedScreenPos(asteroid.x, asteroid.y)
+        const x = centerX + pos.x * scale
+        const y = centerY + pos.y * scale
         // Only draw if within radar bounds
         if (x < 0 || x > size || y < 0 || y > size) continue
         const dotSize = asteroid.size === 'large' ? 2.5 : asteroid.size === 'medium' ? 2 : 1.5
@@ -585,11 +586,12 @@
         radarCtx.fill()
       }
 
-      // Remote ships (red triangles) - relative to ship position
+      // Remote ships (red triangles) - wrapped to nearest position
       for (const ship of remoteShips.values()) {
         if (!ship.alive) continue
-        const x = centerX + (ship.x - localShip.x) * scale
-        const y = centerY + (ship.y - localShip.y) * scale
+        const pos = getWrappedScreenPos(ship.x, ship.y)
+        const x = centerX + pos.x * scale
+        const y = centerY + pos.y * scale
         if (x < 0 || x > size || y < 0 || y > size) continue
         // Draw ship pointing in its actual direction
         radarCtx.save()
