@@ -533,16 +533,21 @@
       }
     }
     
-    // Challenge UI event handlers
-    document.getElementById('challenge-submit').addEventListener('click', submitChallenge)
-    document.getElementById('challenge-input').addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') submitChallenge()
-    })
-    document.getElementById('challenge-hint-btn').addEventListener('click', () => {
-      const hint = document.getElementById('challenge-hint')
-      hint.style.display = 'block'
-      // Could deduct points here if we track hints server-side
-    })
+    // Challenge UI event handlers (run after DOM is ready)
+    setTimeout(() => {
+      const submitBtn = document.getElementById('challenge-submit')
+      const input = document.getElementById('challenge-input')
+      const hintBtn = document.getElementById('challenge-hint-btn')
+      
+      if (submitBtn) submitBtn.addEventListener('click', submitChallenge)
+      if (input) input.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') submitChallenge()
+      })
+      if (hintBtn) hintBtn.addEventListener('click', () => {
+        const hint = document.getElementById('challenge-hint')
+        if (hint) hint.style.display = 'block'
+      })
+    }, 100)
 
     // --- Send Input (60 TPS) ---
     setInterval(() => {
