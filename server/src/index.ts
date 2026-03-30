@@ -6,6 +6,7 @@ import {
   WORLD_SIZE, SHIP_SIZE, SHIP_COLLISION_RADIUS, ASTEROID_COLLISION_FACTOR, BULLET_LIFETIME,
   type ShipState, type AsteroidState, type BulletState, type InputState, DEFAULT_INPUT
 } from '@asteroids/shared'
+import { SATS_CATEGORIES, SATS_CHALLENGES, SCORING } from '@asteroids/shared/sats-words'
 
 const PORT = process.env.PORT || 3000
 const CLIENT_DIR = process.env.CLIENT_DIR || '../../client'
@@ -54,6 +55,15 @@ type Player = {
   inputSeq: number
   fireCooldown: number
   respawnTime?: number
+  // Challenge state
+  depositedLetterCount: number  // Total letters deposited
+  currentChallenge?: {
+    category: string
+    sentenceIndex: number
+    startTime: number
+    usedHints: number
+  }
+  challengeStreak: number  // Consecutive correct answers
 }
 
 type GameModeConfig = {
@@ -68,7 +78,7 @@ const players = new Map<string, Player>()
 const asteroids: AsteroidState[] = []
 const bullets: BulletState[] = []
 const letterDrops: LetterDrop[] = []
-const depositedLetters: { letter: string, x: number, y: number, vx: number, vy: number, life: number }[] = []  // Letters at base
+const depositedLetters: { letter: string, x: number, y: number, life: number }[] = []  // Letters at base
 let gameStateSeq = 0
 
 let gameMode: GameModeConfig = {
@@ -279,29 +289,59 @@ function checkBaseDeposit(player: Player) {
     // Player is at base - deposit letters
     const deposited = ship.collectedLetters.length
     ship.score += deposited * 5  // Bonus for depositing
+    player.depositedLetterCount += deposited
     
     // Add letters to floating deposit pool
     for (const letter of ship.collectedLetters) {
       const angle = Math.random() * Math.PI * 2
-      const speed = 0.5 + Math.random() * 1
       depositedLetters.push({
         letter,
         x: BASE_POSITION.x + Math.cos(angle) * BASE_RADIUS * 0.5,
         y: BASE_POSITION.y + Math.sin(angle) * BASE_RADIUS * 0.5,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed,
         life: 1200,  // 20 seconds
       })
     }
     
-    console.log(`[BASE] ${player.name} deposited ${deposited} letters: ${ship.collectedLetters.join('')}`)
+    console.log(`[BASE] ${player.name} deposited ${deposited} letters (total: ${player.depositedLetterCount})`)
     ship.collectedLetters = []  // Clear collected letters
     
     // Limit deposited letters (prevent memory growth)
     while (depositedLetters.length > 100) {
       depositedLetters.shift()
     }
+    
+    // Trigger challenge if player has 5+ letters deposited
+    if (player.depositedLetterCount >= 5 && !player.currentChallenge) {
+      startChallenge(player)
+    }
   }
+}
+
+// Start a new SATs challenge for player
+function startChallenge(player: Player) {
+  const categories = Object.keys(SATS_CATEGORIES)
+  const category = categories[Math.floor(Math.random() * categories.length)]
+  
+  // Get challenges for this category
+  const categoryChallenges = SATS_CHALLENGES.find(c => c.category === category)
+  if (!categoryChallenges) return
+  
+  const sentenceIndex = Math.floor(Math.random() * categoryChallenges.sentences.length)
+  
+  player.currentChallenge = {
+    category,
+    sentenceIndex,
+    startTime: Date.now(),
+    usedHints: 0,
+  }
+  
+  // Notify player
+  io.to(player.id).emit('challenge-start', {
+    category: SATS_CATEGORIES[category as keyof typeof SATS_CATEGORIES],
+    sentence: categoryChallenges.sentences[sentenceIndex],
+  })
+  
+  console.log(`[CHALLENGE] ${player.name} started ${category} challenge`)
 }
 
 // --- Player Management ---
@@ -337,6 +377,8 @@ function createPlayer(id: string, name: string): Player {
     input: { ...DEFAULT_INPUT },
     inputSeq: 0,
     fireCooldown: 0,
+    depositedLetterCount: 0,
+    challengeStreak: 0,
   }
 }
 
@@ -385,8 +427,23 @@ function broadcastState() {
     depositedLetters,  // Letters floating at base
     gameActive,
     timeRemaining: gameActive ? Math.max(0, gameMode.duration - (Date.now() - gameStartTime)) : 0,
+    // Challenge state per player (only send to relevant player via socket)
   }
   io.emit('state', state)
+  
+  // Send challenge state to players who have active challenges
+  for (const [playerId, player] of players.entries()) {
+    if (player.currentChallenge) {
+      const categoryChallenges = SATS_CHALLENGES.find(c => c.category === player.currentChallenge?.category)
+      if (categoryChallenges) {
+        io.to(playerId).emit('challenge-active', {
+          category: SATS_CATEGORIES[player.currentChallenge.category as keyof typeof SATS_CATEGORIES],
+          sentence: categoryChallenges.sentences[player.currentChallenge.sentenceIndex],
+          timeElapsed: Date.now() - player.currentChallenge.startTime,
+        })
+      }
+    }
+  }
 }
 
 function startGame() {
@@ -497,6 +554,44 @@ io.on('connection', (socket) => {
   
   socket.on('ping', (data: { timestamp: number }) => {
     socket.emit('pong', { timestamp: Date.now() })
+  })
+  
+  // Handle challenge answer
+  socket.on('challenge-answer', (data: { answer: string }) => {
+    const player = players.get(socket.id)
+    if (!player || !player.currentChallenge) return
+    
+    const categoryChallenges = SATS_CHALLENGES.find(c => c.category === player.currentChallenge?.category)
+    if (!categoryChallenges) return
+    
+    const challenge = categoryChallenges.sentences[player.currentChallenge.sentenceIndex]
+    if (!challenge) return
+    
+    const isCorrect = data.answer.toLowerCase().trim() === challenge.answer.toLowerCase()
+    const timeTaken = (Date.now() - player.currentChallenge.startTime) / 1000
+    
+    let points = 0
+    if (isCorrect) {
+      points = SCORING.correctWord
+      if (timeTaken < 10) points += SCORING.bonusSpeed
+      points += player.challengeStreak * SCORING.streakBonus
+      player.challengeStreak++
+    } else {
+      player.challengeStreak = 0
+    }
+    
+    player.ship.score += points
+    player.currentChallenge = undefined
+    
+    // Send result to player
+    socket.emit('challenge-result', {
+      correct: isCorrect,
+      correctAnswer: challenge.answer,
+      points,
+      streak: player.challengeStreak,
+    })
+    
+    console.log(`[CHALLENGE] ${player.name} ${isCorrect ? 'correct' : 'wrong'} (+${points} points)`)
   })
   
   socket.on('disconnect', () => {
@@ -777,23 +872,18 @@ function updatePhysics() {
     const dx = letter.x - BASE_POSITION.x
     const dy = letter.y - BASE_POSITION.y
     const dist = Math.hypot(dx, dy)
-    const targetRadius = 50  // Fixed orbit radius
+    const targetRadius = 50
     
     if (dist > 0.1) {
-      // Normalize
       const nx = dx / dist
       const ny = dy / dist
-      
-      // Perpendicular vector (for circular motion)
       const px = -ny
       const py = nx
       
-      // Move perpendicular to create orbit (constant tangential velocity)
       const orbitSpeed = 0.8
       letter.x += px * orbitSpeed
       letter.y += py * orbitSpeed
       
-      // Very gentle pull toward target radius
       const radiusError = dist - targetRadius
       letter.x -= nx * radiusError * 0.001
       letter.y -= ny * radiusError * 0.001
