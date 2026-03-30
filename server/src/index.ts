@@ -175,6 +175,8 @@ function createAsteroid(x?: number, y?: number, size?: 'large' | 'medium' | 'sma
     vertices,
     hp: health,
     maxHp: health,
+    rotation: Math.random() * Math.PI * 2,  // Random start rotation
+    rotationSpeed: (Math.random() - 0.5) * 0.04,  // Gentle rotation speed
   }
 }
 

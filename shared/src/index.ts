@@ -60,6 +60,8 @@ export type AsteroidState = {
   vertices: Vector2[]
   hp: number
   maxHp: number
+  rotation: number
+  rotationSpeed: number
 }
 
 export type BulletState = {
