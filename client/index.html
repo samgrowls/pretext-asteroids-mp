@@ -559,52 +559,105 @@
       ctx.textAlign = 'center'
       ctx.fillText(ship.name || 'Player', pos.x, pos.y - 35)
       
-      // Render letter trail behind ship
-      if (ship.collectedLetters && ship.collectedLetters.length > 0) {
+      // Render letter trail behind ship (only for local player)
+      if (isLocal && ship.collectedLetters && ship.collectedLetters.length > 0) {
         renderLetterTrail(ship, pos)
+      }
+    }
+
+    // Letter trail with flocking behavior
+    const letterTrailState = {
+      positions: [],  // {x, y, vx, vy} for each letter
+      targetPos: null,  // Where letters are flocking to
+    }
+    
+    function updateLetterTrail(ship, shipPos) {
+      // Initialize trail positions if needed
+      while (letterTrailState.positions.length < (ship.collectedLetters?.length || 0)) {
+        letterTrailState.positions.push({
+          x: shipPos.x,
+          y: shipPos.y,
+          vx: ship.vx,
+          vy: ship.vy,
+        })
+      }
+      
+      // Trim excess
+      while (letterTrailState.positions.length > (ship.collectedLetters?.length || 0)) {
+        letterTrailState.positions.pop()
+      }
+      
+      // Target position follows ship with offset
+      const trailOffset = 35
+      const trailAngle = ship.angle + Math.PI / 2 + Math.PI
+      letterTrailState.targetPos = {
+        x: shipPos.x + Math.cos(trailAngle) * trailOffset,
+        y: shipPos.y + Math.sin(trailAngle) * trailOffset,
+        vx: ship.vx,
+        vy: ship.vy,
+      }
+      
+      // Update each letter with flocking behavior
+      for (let i = 0; i < letterTrailState.positions.length; i++) {
+        const letter = letterTrailState.positions[i]
+        
+        // Target for this letter (each follows the one before it)
+        const target = i === 0 ? letterTrailState.targetPos : letterTrailState.positions[i - 1]
+        const followDistance = 22 + i * 3  // Letters spread out slightly
+        
+        // Calculate desired velocity toward target
+        const dx = target.x - letter.x
+        const dy = target.y - letter.y
+        const dist = Math.hypot(dx, dy)
+        
+        if (dist > 0.1) {
+          // Steer toward target
+          const desiredVx = (dx / dist) * 3  // Max speed
+          const desiredVy = (dy / dist) * 3
+          
+          // Smooth steering (not instant)
+          const steerStrength = 0.08
+          letter.vx += (desiredVx - letter.vx) * steerStrength
+          letter.vy += (desiredVy - letter.vy) * steerStrength
+          
+          // Add some noise/swirl for organic motion
+          const noise = Math.sin(Date.now() * 0.005 + i * 0.8) * 0.5
+          letter.vx += Math.cos(noise) * 0.1
+          letter.vy += Math.sin(noise) * 0.1
+        }
+        
+        // Damping
+        letter.vx *= 0.94
+        letter.vy *= 0.94
+        
+        // Update position
+        letter.x += letter.vx
+        letter.y += letter.vy
       }
     }
 
     function renderLetterTrail(ship, shipPos) {
       if (!ship.collectedLetters || ship.collectedLetters.length === 0) return
       
-      const trailSpacing = 20  // Distance between letters
-      const trailPositions = []
+      // Update physics first
+      updateLetterTrail(ship, shipPos)
       
-      // Calculate trail positions following ship path
-      let trailX = shipPos.x
-      let trailY = shipPos.y
-      let trailAngle = ship.angle + Math.PI / 2  // Ship facing direction
-      
-      for (let i = 0; i < ship.collectedLetters.length; i++) {
-        // Each letter follows behind the previous one
-        const distanceBehind = trailSpacing * (i + 1)
-        
-        // Smooth curve behind ship using ship's angle
-        const letterAngle = trailAngle + Math.PI  // Opposite to ship
-        const letterX = shipPos.x + Math.cos(letterAngle) * Math.min(distanceBehind, 300)
-        const letterY = shipPos.y + Math.sin(letterAngle) * Math.min(distanceBehind, 300)
-        
-        trailPositions.push({ x: letterX, y: letterY, letter: ship.collectedLetters[i] })
-      }
-      
-      // Draw connecting lines (the "chain")
-      ctx.strokeStyle = 'rgba(0, 255, 200, 0.4)'
-      ctx.lineWidth = 2
+      // Draw connecting lines (subtle, flowing)
+      ctx.strokeStyle = 'rgba(0, 255, 200, 0.25)'
+      ctx.lineWidth = 1.5
       ctx.beginPath()
-      if (trailPositions.length > 0) {
-        ctx.moveTo(shipPos.x, shipPos.y)
-        for (const pos of trailPositions) {
-          ctx.lineTo(pos.x, pos.y)
-        }
+      ctx.moveTo(shipPos.x, shipPos.y)
+      for (const pos of letterTrailState.positions) {
+        ctx.lineTo(pos.x, pos.y)
       }
       ctx.stroke()
       
-      // Draw letters at their positions
-      for (let i = 0; i < trailPositions.length; i++) {
-        const pos = trailPositions[i]
-        const alpha = 1 - (i / trailPositions.length) * 0.5
-        const hue = (pos.letter.charCodeAt(0) * 17) % 360
+      // Draw letters at their flocking positions
+      for (let i = 0; i < letterTrailState.positions.length; i++) {
+        const pos = letterTrailState.positions[i]
+        const letter = ship.collectedLetters[i]
+        const alpha = 1 - (i / letterTrailState.positions.length) * 0.5
+        const hue = (letter.charCodeAt(0) * 17) % 360
         
         ctx.globalAlpha = alpha
         ctx.fillStyle = `hsl(${hue}, 80%, 60%)`
@@ -614,9 +667,13 @@
         ctx.shadowColor = `hsl(${hue}, 80%, 50%)`
         ctx.shadowBlur = 8
         
-        // Slight orbit/wave motion for organic feel
-        const waveOffset = Math.sin(Date.now() * 0.005 + i * 0.5) * 3
-        ctx.fillText(pos.letter, pos.x + waveOffset, pos.y)
+        // Slight rotation based on velocity
+        const angle = Math.atan2(pos.vy, pos.vx) + Math.PI / 2
+        ctx.save()
+        ctx.translate(pos.x, pos.y)
+        ctx.rotate(angle * 0.3)  // Subtle tilt
+        ctx.fillText(letter, 0, 0)
+        ctx.restore()
       }
       ctx.shadowBlur = 0
       ctx.globalAlpha = 1
