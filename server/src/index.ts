@@ -770,25 +770,47 @@ function updatePhysics() {
     }
   }
 
-  // Update deposited letters at base (float gently around base)
+  // Update deposited letters at base (stable circular orbit)
   for (let i = depositedLetters.length - 1; i >= 0; i--) {
     const letter = depositedLetters[i]!
     
-    // Gentle orbital motion around base center
     const dx = letter.x - BASE_POSITION.x
     const dy = letter.y - BASE_POSITION.y
     const dist = Math.hypot(dx, dy)
+    const targetRadius = BASE_RADIUS * 0.4  // Orbit at 40% of base radius
     
-    // Add gentle tangential velocity (orbit)
-    if (dist > 10 && dist < BASE_RADIUS * 0.7) {
-      const orbitSpeed = 0.0005
-      letter.vx += -dy * orbitSpeed
-      letter.vy += dx * orbitSpeed
+    if (dist > 1) {
+      // Calculate unit vectors
+      const nx = dx / dist  // Normal (outward from center)
+      const ny = dy / dist
+      
+      // Tangent vector (perpendicular to normal) - for orbit
+      const tx = -ny
+      const ty = nx
+      
+      // Current radial and tangential velocity
+      const radialVel = letter.vx * nx + letter.vy * ny
+      const tangentialVel = letter.vx * tx + letter.vy * ny
+      
+      // Desired orbital speed for this radius
+      const desiredOrbitalSpeed = 1.2
+      
+      // Apply forces:
+      // 1. Gentle pull toward target radius (spring force)
+      const radiusError = dist - targetRadius
+      const springForce = -radiusError * 0.0008
+      
+      // 2. Maintain orbital velocity (perpendicular to radius)
+      const orbitAdjust = (desiredOrbitalSpeed - tangentialVel) * 0.02
+      
+      // Apply forces
+      letter.vx += nx * springForce + tx * orbitAdjust
+      letter.vy += ny * springForce + ty * orbitAdjust
+      
+      // Damping (prevent energy gain)
+      letter.vx *= 0.992
+      letter.vy *= 0.992
     }
-    
-    // Gentle damping (no aggressive center pull)
-    letter.vx *= 0.995
-    letter.vy *= 0.995
     
     // Update position
     letter.x += letter.vx
