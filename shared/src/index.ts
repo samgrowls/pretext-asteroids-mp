@@ -46,6 +46,7 @@ export type ShipState = {
   score: number
   deaths: number
   kills: number
+  collectedLetters: string[]  // Letters collected (for trail rendering)
 }
 
 export type AsteroidState = {

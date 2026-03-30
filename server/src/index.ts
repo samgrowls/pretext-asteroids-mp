@@ -21,6 +21,8 @@ const ASTEROID_SPEED = 2.5
 const RESPAWN_TIME = 3000 // ms
 const GAME_DURATION = 180000 // 3 minutes in ms
 const WINNING_SCORE = 500
+const BASE_POSITION = { x: WORLD_SIZE / 2, y: WORLD_SIZE / 2 }  // Center of map
+const BASE_RADIUS = 150
 
 // Year 6 SATs common words (subset of most frequent)
 const SATS_WORDS = [
@@ -252,8 +254,32 @@ function checkLetterCollection(player: Player) {
     if (distance(player.ship, drop) < collectionRadius) {
       drop.collected = true
       player.ship.score += 10 // Bonus points for collecting
+      // Add to collected letters for trail
+      if (!player.ship.collectedLetters) player.ship.collectedLetters = []
+      player.ship.collectedLetters.push(drop.letter)
+      // Keep trail manageable (max 15 letters)
+      if (player.ship.collectedLetters.length > 15) {
+        player.ship.collectedLetters.shift()
+      }
       console.log(`[LETTER] ${player.name} collected '${drop.letter}'`)
     }
+  }
+  
+  // Check if player is at base to deposit letters
+  checkBaseDeposit(player)
+}
+
+// Check if player is at base and deposit letters
+function checkBaseDeposit(player: Player) {
+  const ship = player.ship
+  const distToBase = Math.hypot(ship.x - BASE_POSITION.x, ship.y - BASE_POSITION.y)
+  
+  if (distToBase < BASE_RADIUS && ship.collectedLetters && ship.collectedLetters.length > 0) {
+    // Player is at base - deposit letters
+    const deposited = ship.collectedLetters.length
+    ship.score += deposited * 5  // Bonus for depositing
+    console.log(`[BASE] ${player.name} deposited ${deposited} letters: ${ship.collectedLetters.join('')}`)
+    ship.collectedLetters = []  // Clear collected letters
   }
 }
 
@@ -285,6 +311,7 @@ function createPlayer(id: string, name: string): Player {
       score: 0,
       deaths: 0,
       kills: 0,
+      collectedLetters: [],
     },
     input: { ...DEFAULT_INPUT },
     inputSeq: 0,

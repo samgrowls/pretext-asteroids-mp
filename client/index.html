@@ -73,6 +73,8 @@
   <script>
     // --- Constants ---
     const WORLD_SIZE = 4000
+    const BASE_POSITION = { x: WORLD_SIZE / 2, y: WORLD_SIZE / 2 }
+    const BASE_RADIUS = 150
     const SHIP_SIZE = 24
     const SHIP_COLLISION_RADIUS = 10
     const SHIP_MAX_SPEED = 12
@@ -545,6 +547,77 @@
       ctx.font = '12px "Courier New", monospace'
       ctx.textAlign = 'center'
       ctx.fillText(ship.name || 'Player', pos.x, pos.y - 35)
+      
+      // Render letter trail behind ship
+      if (ship.collectedLetters && ship.collectedLetters.length > 0) {
+        renderLetterTrail(ship, pos)
+      }
+    }
+
+    function renderLetterTrail(ship, shipPos) {
+      const trailSpacing = 25
+      const trailStartOffset = 40
+      
+      for (let i = 0; i < ship.collectedLetters.length; i++) {
+        const letter = ship.collectedLetters[i]
+        const distanceBehind = trailStartOffset + i * trailSpacing
+        
+        // Calculate position behind ship (opposite to ship angle)
+        const trailAngle = ship.angle + Math.PI / 2 + Math.PI // Behind ship
+        const trailX = shipPos.x + Math.cos(trailAngle) * distanceBehind
+        const trailY = shipPos.y + Math.sin(trailAngle) * distanceBehind
+        
+        // Fade out older letters
+        const alpha = 1 - (i / ship.collectedLetters.length) * 0.5
+        
+        // Color based on letter
+        const hue = (letter.charCodeAt(0) * 17) % 360
+        ctx.globalAlpha = alpha
+        ctx.fillStyle = `hsl(${hue}, 80%, 60%)`
+        ctx.font = 'bold 18px "Courier New", monospace'
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.shadowColor = `hsl(${hue}, 80%, 50%)`
+        ctx.shadowBlur = 8
+        ctx.fillText(letter, trailX, trailY)
+        ctx.shadowBlur = 0
+      }
+      ctx.globalAlpha = 1
+    }
+
+    function renderBase() {
+      const pos = getWrappedScreenPos(BASE_POSITION.x, BASE_POSITION.y)
+      
+      // Draw base zone (glowing circle)
+      ctx.save()
+      ctx.translate(pos.x, pos.y)
+      
+      // Outer glow
+      const gradient = ctx.createRadialGradient(0, 0, BASE_RADIUS * 0.5, 0, 0, BASE_RADIUS)
+      gradient.addColorStop(0, 'rgba(0, 255, 100, 0.1)')
+      gradient.addColorStop(1, 'rgba(0, 255, 100, 0)')
+      ctx.fillStyle = gradient
+      ctx.beginPath()
+      ctx.arc(0, 0, BASE_RADIUS, 0, Math.PI * 2)
+      ctx.fill()
+      
+      // Inner ring
+      ctx.strokeStyle = '#0f8'
+      ctx.lineWidth = 3
+      ctx.setLineDash([10, 5])
+      ctx.beginPath()
+      ctx.arc(0, 0, BASE_RADIUS * 0.8, 0, Math.PI * 2)
+      ctx.stroke()
+      
+      // Base label
+      ctx.fillStyle = '#0f8'
+      ctx.font = 'bold 16px "Courier New", monospace'
+      ctx.textAlign = 'center'
+      ctx.fillText('BASE', 0, -BASE_RADIUS - 15)
+      ctx.font = '12px "Courier New", monospace'
+      ctx.fillText('Deposit Letters Here', 0, -BASE_RADIUS)
+      
+      ctx.restore()
     }
 
     // Render bullet with seamless world wrapping
@@ -724,6 +797,9 @@
       
       // Render letter drops
       for (const drop of letterDrops) renderLetterDrop(drop)
+      
+      // Render base
+      renderBase()
 
       // Render particles on top
       renderParticles()
