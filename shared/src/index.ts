@@ -81,6 +81,8 @@ export type LetterDrop = {
   letter: string
   life: number
   collected: boolean
+  rotation?: number
+  rotationSpeed?: number
 }
 
 export type GameState = {

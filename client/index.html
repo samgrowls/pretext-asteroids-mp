@@ -860,7 +860,14 @@
       // Glow for visibility
       ctx.shadowColor = `hsl(${hue}, 80%, 50%)`
       ctx.shadowBlur = 10
-      ctx.fillText(drop.letter, pos.x, pos.y)
+      
+      // Rotate letter
+      ctx.save()
+      ctx.translate(pos.x, pos.y)
+      ctx.rotate(drop.rotation || 0)
+      ctx.fillText(drop.letter, 0, 0)
+      ctx.restore()
+      
       ctx.shadowBlur = 0
       ctx.globalAlpha = 1
     }
@@ -872,8 +879,8 @@
         // Cull if off screen
         if (pos.x < -50 || pos.x > window.innerWidth + 50 || pos.y < -50 || pos.y > window.innerHeight + 50) continue
 
-        // Fade out near end of life (20 seconds = 1200 frames)
-        const lifeRatio = drop.life / 1200
+        // Fade out near end of life (permanent now)
+        const lifeRatio = drop.life / 999999
         if (lifeRatio < 0.2) {
           ctx.globalAlpha = lifeRatio / 0.2
         } else {
@@ -893,7 +900,13 @@
         
         // Slight floating motion
         const floatOffset = Math.sin(Date.now() * 0.003 + drop.life) * 4
-        ctx.fillText(drop.letter, pos.x, pos.y + floatOffset)
+        
+        // Rotate letter based on deposited angle
+        ctx.save()
+        ctx.translate(pos.x, pos.y + floatOffset)
+        ctx.rotate((drop.angle || 0) + Math.PI / 2)  // Angle from spiral + upright
+        ctx.fillText(drop.letter, 0, 0)
+        ctx.restore()
       }
       ctx.shadowBlur = 0
       ctx.globalAlpha = 1

@@ -254,6 +254,8 @@ function spawnLetterDrop(x: number, y: number, vx: number, vy: number) {
     letter,
     life: 600, // 10 seconds at 60fps
     collected: false,
+    rotation: Math.random() * Math.PI * 2,  // Random start rotation
+    rotationSpeed: (Math.random() - 0.5) * 0.05,  // Gentle rotation
   })
 }
 
@@ -291,22 +293,26 @@ function checkBaseDeposit(player: Player) {
     ship.score += deposited * 5  // Bonus for depositing
     player.depositedLetterCount += deposited
     
-    // Add letters to floating deposit pool
-    for (const letter of ship.collectedLetters) {
-      const angle = Math.random() * Math.PI * 2
+    // Add letters to static display around base (no expiry, no physics)
+    const totalLetters = depositedLetters.length
+    for (let i = 0; i < deposited; i++) {
+      const letter = ship.collectedLetters[i]
+      const angle = (totalLetters + i) * 0.3  // Spread around circle
+      const radius = 60 + (Math.floor((totalLetters + i) / 12)) * 15  // Spiral outward
       depositedLetters.push({
         letter,
-        x: BASE_POSITION.x + Math.cos(angle) * BASE_RADIUS * 0.5,
-        y: BASE_POSITION.y + Math.sin(angle) * BASE_RADIUS * 0.5,
-        life: 1200,  // 20 seconds
+        x: BASE_POSITION.x + Math.cos(angle) * radius,
+        y: BASE_POSITION.y + Math.sin(angle) * radius,
+        angle,  // For rotation
+        life: 999999,  // Essentially permanent
       })
     }
     
     console.log(`[BASE] ${player.name} deposited ${deposited} letters (total: ${player.depositedLetterCount})`)
     ship.collectedLetters = []  // Clear collected letters
     
-    // Limit deposited letters (prevent memory growth)
-    while (depositedLetters.length > 100) {
+    // Limit deposited letters (prevent memory growth, but keep more)
+    while (depositedLetters.length > 200) {
       depositedLetters.shift()
     }
     
@@ -693,6 +699,7 @@ function updatePhysics() {
   for (const asteroid of asteroids) {
     asteroid.x += asteroid.vx
     asteroid.y += asteroid.vy
+    asteroid.rotation += asteroid.rotationSpeed  // Add rotation
     const wrapped = wrapPosition(asteroid.x, asteroid.y)
     asteroid.x = wrapped.x
     asteroid.y = wrapped.y
@@ -854,6 +861,7 @@ function updatePhysics() {
     const drop = letterDrops[i]!
     drop.x += drop.vx
     drop.y += drop.vy
+    drop.rotation += drop.rotationSpeed  // Add rotation
     const wrapped = wrapPosition(drop.x, drop.y)
     drop.x = wrapped.x
     drop.y = wrapped.y
@@ -865,30 +873,10 @@ function updatePhysics() {
     }
   }
 
-  // Update deposited letters at base (simple stable orbit)
+  // Update deposited letters at base (static display, no physics)
+  // Letters are now permanent and arranged in spiral pattern
   for (let i = depositedLetters.length - 1; i >= 0; i--) {
     const letter = depositedLetters[i]!
-    
-    const dx = letter.x - BASE_POSITION.x
-    const dy = letter.y - BASE_POSITION.y
-    const dist = Math.hypot(dx, dy)
-    const targetRadius = 50
-    
-    if (dist > 0.1) {
-      const nx = dx / dist
-      const ny = dy / dist
-      const px = -ny
-      const py = nx
-      
-      const orbitSpeed = 0.8
-      letter.x += px * orbitSpeed
-      letter.y += py * orbitSpeed
-      
-      const radiusError = dist - targetRadius
-      letter.x -= nx * radiusError * 0.001
-      letter.y -= ny * radiusError * 0.001
-    }
-    
     letter.life--
     if (letter.life <= 0) {
       depositedLetters.splice(i, 1)
