@@ -287,7 +287,7 @@
     })
 
     // --- Game State ---
-    const localShip = { id: '', name: '', x: 0, y: 0, vx: 0, vy: 0, angle: 0, alive: true, score: 0, deaths: 0, kills: 0, prevX: 0, prevY: 0 }
+    const localShip = { id: '', name: '', x: 0, y: 0, vx: 0, vy: 0, angle: 0, alive: true, score: 0, deaths: 0, kills: 0, prevX: 0, prevY: 0, collectedLetters: [] }
     const remoteShips = new Map()
     const asteroids = []
     const bullets = []
@@ -390,6 +390,10 @@
         localShip.vx = serverShip.vx; localShip.vy = serverShip.vy
         localShip.angle = serverShip.angle; localShip.alive = serverShip.alive
         localShip.score = serverShip.score; localShip.deaths = serverShip.deaths; localShip.kills = serverShip.kills
+        // Update collected letters for trail rendering
+        if (serverShip.collectedLetters) {
+          localShip.collectedLetters = [...serverShip.collectedLetters]
+        }
       }
 
       remoteShips.clear()
@@ -585,37 +589,46 @@
       ctx.globalAlpha = 1
     }
 
+    // Cache for base gradient (expensive to create every frame)
+    let baseGradient = null
+    
     function renderBase() {
       const pos = getWrappedScreenPos(BASE_POSITION.x, BASE_POSITION.y)
       
-      // Draw base zone (glowing circle)
+      // Cull if off screen
+      if (pos.x < -BASE_RADIUS || pos.x > window.innerWidth + BASE_RADIUS ||
+          pos.y < -BASE_RADIUS || pos.y > window.innerHeight + BASE_RADIUS) return
+      
+      // Create gradient once
+      if (!baseGradient) {
+        const tempCanvas = document.createElement('canvas')
+        tempCanvas.width = BASE_RADIUS * 2
+        tempCanvas.height = BASE_RADIUS * 2
+        const tempCtx = tempCanvas.getContext('2d')
+        const grad = tempCtx.createRadialGradient(
+          BASE_RADIUS, BASE_RADIUS, BASE_RADIUS * 0.5,
+          BASE_RADIUS, BASE_RADIUS, BASE_RADIUS
+        )
+        grad.addColorStop(0, 'rgba(0, 255, 100, 0.15)')
+        grad.addColorStop(1, 'rgba(0, 255, 100, 0)')
+        baseGradient = grad
+      }
+      
       ctx.save()
       ctx.translate(pos.x, pos.y)
       
-      // Outer glow
-      const gradient = ctx.createRadialGradient(0, 0, BASE_RADIUS * 0.5, 0, 0, BASE_RADIUS)
-      gradient.addColorStop(0, 'rgba(0, 255, 100, 0.1)')
-      gradient.addColorStop(1, 'rgba(0, 255, 100, 0)')
-      ctx.fillStyle = gradient
+      // Outer glow (cached gradient)
+      ctx.fillStyle = baseGradient
       ctx.beginPath()
       ctx.arc(0, 0, BASE_RADIUS, 0, Math.PI * 2)
       ctx.fill()
       
-      // Inner ring
-      ctx.strokeStyle = '#0f8'
-      ctx.lineWidth = 3
-      ctx.setLineDash([10, 5])
+      // Inner ring (simplified - no dash pattern which is expensive)
+      ctx.strokeStyle = 'rgba(0, 255, 136, 0.6)'
+      ctx.lineWidth = 2
       ctx.beginPath()
-      ctx.arc(0, 0, BASE_RADIUS * 0.8, 0, Math.PI * 2)
+      ctx.arc(0, 0, BASE_RADIUS * 0.7, 0, Math.PI * 2)
       ctx.stroke()
-      
-      // Base label
-      ctx.fillStyle = '#0f8'
-      ctx.font = 'bold 16px "Courier New", monospace'
-      ctx.textAlign = 'center'
-      ctx.fillText('BASE', 0, -BASE_RADIUS - 15)
-      ctx.font = '12px "Courier New", monospace'
-      ctx.fillText('Deposit Letters Here', 0, -BASE_RADIUS)
       
       ctx.restore()
     }
@@ -736,6 +749,23 @@
         radarCtx.closePath()
         radarCtx.fill()
         radarCtx.restore()
+      }
+      
+      // Home base (green circle at center of world)
+      const basePos = getWrappedScreenPos(BASE_POSITION.x, BASE_POSITION.y)
+      const baseX = centerX + basePos.x * scale
+      const baseY = centerY + basePos.y * scale
+      if (baseX > 0 && baseX < size && baseY > 0 && baseY < size) {
+        // Base zone on radar
+        radarCtx.fillStyle = 'rgba(0, 255, 136, 0.3)'
+        radarCtx.beginPath()
+        radarCtx.arc(baseX, baseY, 8, 0, Math.PI * 2)  // Fixed size on radar
+        radarCtx.fill()
+        radarCtx.strokeStyle = '#0f8'
+        radarCtx.lineWidth = 1
+        radarCtx.beginPath()
+        radarCtx.arc(baseX, baseY, 6, 0, Math.PI * 2)
+        radarCtx.stroke()
       }
     }
 
