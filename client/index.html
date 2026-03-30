@@ -223,16 +223,24 @@
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
 
+      // Create a seeded random based on asteroid id for consistent but varied patterns
+      const seed = asteroid.id.split('-').reduce((a, b) => a + (parseFloat(b) || 0), 0)
+      const randomGlyph = (x, y) => {
+        // Mix position with seed for varied but consistent patterns per asteroid
+        const hash = Math.sin(seed * 1000 + x * 17 + y * 31) * 10000
+        return Math.floor((hash - Math.floor(hash)) * ASTEROID_GLYPHS.length)
+      }
+
       // Fill interior following the actual polygon shape (not circular)
       for (let y = -radius + density; y < radius; y += density) {
         for (let x = -radius + density; x < radius; x += density) {
           // Check if point is inside the polygon
           if (pointInPolygon({ x, y }, asteroid.vertices)) {
-            const glyphIndex = Math.floor((Math.abs(x) + Math.abs(y) + radius) % ASTEROID_GLYPHS.length)
+            const glyphIndex = randomGlyph(x, y)
             const glyph = ASTEROID_GLYPHS[glyphIndex]
             const shadeIndex = ASTEROID_GLYPHS.indexOf(glyph)
-            const lightness = 40 + ((shadeIndex >= 0 ? shadeIndex : 0) % 7) * 6
-            ctx.globalAlpha = 0.7
+            const lightness = 35 + ((shadeIndex >= 0 ? shadeIndex : 0) % 9) * 5
+            ctx.globalAlpha = 0.75
             ctx.fillStyle = `hsl(0, 0%, ${lightness}%)`
             ctx.font = `bold ${fontSize}px "Courier New", monospace`
             ctx.fillText(glyph, centerX + x, centerY + y)
