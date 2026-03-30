@@ -448,6 +448,102 @@
       }
     })
 
+    // --- Challenge State ---
+    let currentChallenge = null
+    let challengeTimerInterval = null
+    
+    // Socket handlers for challenges
+    socket.on('challenge-start', (data) => {
+      console.log('[CHALLENGE] Started:', data)
+      showChallengePanel(data)
+    })
+    
+    socket.on('challenge-active', (data) => {
+      console.log('[CHALLENGE] Active:', data)
+      updateChallengePanel(data)
+    })
+    
+    socket.on('challenge-result', (data) => {
+      console.log('[CHALLENGE] Result:', data)
+      showChallengeResult(data)
+    })
+    
+    // Challenge UI functions
+    function showChallengePanel(data) {
+      currentChallenge = data
+      const panel = document.getElementById('challenge-panel')
+      const category = document.getElementById('challenge-category')
+      const sentence = document.getElementById('challenge-sentence')
+      const hint = document.getElementById('challenge-hint')
+      const input = document.getElementById('challenge-input')
+      const streak = document.getElementById('challenge-streak')
+      
+      category.textContent = data.category
+      sentence.textContent = data.sentence.text.replace('_____', '_____')
+      hint.textContent = 'Hint: ' + data.sentence.hint
+      input.value = ''
+      streak.textContent = ''
+      
+      panel.classList.remove('hidden')
+      input.focus()
+      
+      // Start timer
+      if (challengeTimerInterval) clearInterval(challengeTimerInterval)
+      challengeTimerInterval = setInterval(() => {
+        const timer = document.getElementById('challenge-timer')
+        if (currentChallenge) {
+          const elapsed = Math.floor((Date.now() - currentChallenge.startTime) / 1000)
+          timer.textContent = elapsed + 's'
+        }
+      }, 1000)
+    }
+    
+    function updateChallengePanel(data) {
+      if (!currentChallenge) return
+      currentChallenge = data
+      const timer = document.getElementById('challenge-timer')
+      const elapsed = Math.floor(data.timeElapsed / 1000)
+      timer.textContent = elapsed + 's'
+    }
+    
+    function showChallengeResult(data) {
+      if (challengeTimerInterval) clearInterval(challengeTimerInterval)
+      
+      const panel = document.getElementById('challenge-panel')
+      const streak = document.getElementById('challenge-streak')
+      
+      streak.textContent = data.correct 
+        ? `✓ Correct! +${data.points} points (Streak: ${data.streak})`
+        : `✗ Wrong! The answer was: ${data.correctAnswer}`
+      streak.style.color = data.correct ? '#0f0' : '#f00'
+      
+      // Auto-hide after 2 seconds
+      setTimeout(() => {
+        panel.classList.add('hidden')
+        currentChallenge = null
+      }, 2000)
+    }
+    
+    function submitChallenge() {
+      if (!currentChallenge) return
+      const input = document.getElementById('challenge-input')
+      const answer = input.value.trim()
+      if (answer) {
+        socket.emit('challenge-answer', { answer })
+      }
+    }
+    
+    // Challenge UI event handlers
+    document.getElementById('challenge-submit').addEventListener('click', submitChallenge)
+    document.getElementById('challenge-input').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') submitChallenge()
+    })
+    document.getElementById('challenge-hint-btn').addEventListener('click', () => {
+      const hint = document.getElementById('challenge-hint')
+      hint.style.display = 'block'
+      // Could deduct points here if we track hints server-side
+    })
+
     // --- Send Input (60 TPS) ---
     setInterval(() => {
       if (!playerId) return
@@ -963,5 +1059,125 @@
 
     console.log('🚀 Asteroids MP client starting...')
   </script>
+  
+  <!-- SATs Challenge UI -->
+  <div id="challenge-panel" class="challenge-panel hidden">
+    <div class="challenge-content">
+      <div class="challenge-header">
+        <h2 id="challenge-category">SATs Challenge</h2>
+        <div class="challenge-timer" id="challenge-timer">0s</div>
+      </div>
+      <p class="challenge-sentence" id="challenge-sentence"></p>
+      <div class="challenge-hint" id="challenge-hint"></div>
+      <input type="text" id="challenge-input" class="challenge-input" placeholder="Type the missing word..." autocomplete="off" maxlength="20">
+      <div class="challenge-buttons">
+        <button id="challenge-submit" class="challenge-btn">Submit</button>
+        <button id="challenge-hint-btn" class="challenge-btn secondary">Hint (-10pts)</button>
+      </div>
+      <div class="challenge-streak" id="challenge-streak"></div>
+    </div>
+  </div>
+  
+  <style>
+    .challenge-panel {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: min(500px, 90vw);
+      background: rgba(0, 0, 0, 0.95);
+      border: 3px solid #0f8;
+      border-radius: 16px;
+      padding: 24px;
+      z-index: 1000;
+      box-shadow: 0 0 30px rgba(0, 255, 136, 0.3);
+    }
+    .challenge-panel.hidden {
+      display: none;
+    }
+    .challenge-content {
+      color: #fff;
+      font-family: "Courier New", monospace;
+    }
+    .challenge-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      border-bottom: 2px solid #0f8;
+      padding-bottom: 12px;
+    }
+    .challenge-header h2 {
+      margin: 0;
+      color: #0f8;
+      font-size: 20px;
+    }
+    .challenge-timer {
+      color: #ff0;
+      font-size: 18px;
+      font-weight: bold;
+    }
+    .challenge-sentence {
+      font-size: 18px;
+      line-height: 1.6;
+      margin: 16px 0;
+      min-height: 60px;
+    }
+    .challenge-hint {
+      color: #888;
+      font-size: 14px;
+      font-style: italic;
+      margin-bottom: 16px;
+      min-height: 20px;
+    }
+    .challenge-input {
+      width: 100%;
+      padding: 12px;
+      font-size: 18px;
+      font-family: "Courier New", monospace;
+      border: 2px solid #444;
+      border-radius: 8px;
+      background: #111;
+      color: #fff;
+      margin-bottom: 16px;
+      box-sizing: border-box;
+    }
+    .challenge-input:focus {
+      outline: none;
+      border-color: #0f8;
+    }
+    .challenge-buttons {
+      display: flex;
+      gap: 12px;
+    }
+    .challenge-btn {
+      flex: 1;
+      padding: 12px;
+      font-size: 16px;
+      font-family: "Courier New", monospace;
+      border: none;
+      border-radius: 8px;
+      background: #0f8;
+      color: #000;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    .challenge-btn:hover {
+      background: #0a5;
+    }
+    .challenge-btn.secondary {
+      background: #444;
+      color: #fff;
+    }
+    .challenge-btn.secondary:hover {
+      background: #666;
+    }
+    .challenge-streak {
+      margin-top: 16px;
+      text-align: center;
+      color: #ff0;
+      font-size: 16px;
+    }
+  </style>
 </body>
 </html>
