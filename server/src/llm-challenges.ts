@@ -33,6 +33,10 @@ export async function generateLLMChallenge(
 
     const prompt = buildPrompt(uniqueLetters, difficulty)
     
+    // Add timeout to prevent hanging
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 5000)  // 5 second timeout
+    
     const response = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -55,7 +59,10 @@ export async function generateLLMChallenge(
         max_tokens: 300,
         top_p: 0.9,
       }),
+      signal: controller.signal,
     })
+    
+    clearTimeout(timeoutId)
 
     if (!response.ok) {
       console.error('[LLM] API error:', response.status, response.statusText)
@@ -72,7 +79,11 @@ export async function generateLLMChallenge(
 
     return parseLLMResponse(content, uniqueLetters)
   } catch (error) {
-    console.error('[LLM] Generation failed:', error)
+    if (error instanceof Error && error.name === 'AbortError') {
+      console.error('[LLM] Request timeout')
+    } else {
+      console.error('[LLM] Generation failed:', error)
+    }
     return getFallbackChallenge()
   }
 }
@@ -178,8 +189,10 @@ function getFallbackChallenge(): LLMChallenge {
 
 /**
  * Cache for generated challenges (prevent duplicate API calls)
+ * Key: sorted letters + difficulty, Value: challenge + timestamp
  */
-const challengeCache = new Map<string, LLMChallenge>()
+const challengeCache = new Map<string, { challenge: LLMChallenge, timestamp: number }>()
+const CACHE_TTL = 5 * 60 * 1000  // 5 minutes
 
 /**
  * Get or generate challenge with caching
@@ -191,20 +204,20 @@ export async function getCachedChallenge(
   // Create cache key from sorted letters
   const cacheKey = [...collectedLetters].sort().join('') + ':' + difficulty
   
-  // Check cache (5 minute expiry could be added)
+  // Check cache (with TTL)
   const cached = challengeCache.get(cacheKey)
-  if (cached) {
-    return cached
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return cached.challenge
   }
   
   // Generate new challenge
   const challenge = await generateLLMChallenge(collectedLetters, difficulty) || getFallbackChallenge()
   
   // Cache it
-  challengeCache.set(cacheKey, challenge)
+  challengeCache.set(cacheKey, { challenge, timestamp: Date.now() })
   
-  // Limit cache size
-  if (challengeCache.size > 50) {
+  // Limit cache size (keep last 20)
+  if (challengeCache.size > 20) {
     const firstKey = challengeCache.keys().next().value
     if (firstKey) challengeCache.delete(firstKey)
   }

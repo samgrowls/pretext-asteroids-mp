@@ -327,7 +327,8 @@ function checkBaseDeposit(player: Player) {
     
     // Trigger challenge if player has 5+ letters deposited and no active challenge
     if (player.depositedLetterCount >= 5 && !player.currentChallenge) {
-      startChallenge(player)
+      // Start challenge asynchronously (don't block game loop)
+      startChallenge(player).catch(err => console.error('[CHALLENGE] Error:', err))
     }
   }
 }
