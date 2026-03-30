@@ -770,51 +770,34 @@ function updatePhysics() {
     }
   }
 
-  // Update deposited letters at base (stable circular orbit)
+  // Update deposited letters at base (simple stable orbit)
   for (let i = depositedLetters.length - 1; i >= 0; i--) {
     const letter = depositedLetters[i]!
     
     const dx = letter.x - BASE_POSITION.x
     const dy = letter.y - BASE_POSITION.y
     const dist = Math.hypot(dx, dy)
-    const targetRadius = BASE_RADIUS * 0.4  // Orbit at 40% of base radius
+    const targetRadius = 50  // Fixed orbit radius
     
-    if (dist > 1) {
-      // Calculate unit vectors
-      const nx = dx / dist  // Normal (outward from center)
+    if (dist > 0.1) {
+      // Normalize
+      const nx = dx / dist
       const ny = dy / dist
       
-      // Tangent vector (perpendicular to normal) - for orbit
-      const tx = -ny
-      const ty = nx
+      // Perpendicular vector (for circular motion)
+      const px = -ny
+      const py = nx
       
-      // Current radial and tangential velocity
-      const radialVel = letter.vx * nx + letter.vy * ny
-      const tangentialVel = letter.vx * tx + letter.vy * ny
+      // Move perpendicular to create orbit (constant tangential velocity)
+      const orbitSpeed = 0.8
+      letter.x += px * orbitSpeed
+      letter.y += py * orbitSpeed
       
-      // Desired orbital speed for this radius
-      const desiredOrbitalSpeed = 1.2
-      
-      // Apply forces:
-      // 1. Gentle pull toward target radius (spring force)
+      // Very gentle pull toward target radius
       const radiusError = dist - targetRadius
-      const springForce = -radiusError * 0.0008
-      
-      // 2. Maintain orbital velocity (perpendicular to radius)
-      const orbitAdjust = (desiredOrbitalSpeed - tangentialVel) * 0.02
-      
-      // Apply forces
-      letter.vx += nx * springForce + tx * orbitAdjust
-      letter.vy += ny * springForce + ty * orbitAdjust
-      
-      // Damping (prevent energy gain)
-      letter.vx *= 0.992
-      letter.vy *= 0.992
+      letter.x -= nx * radiusError * 0.001
+      letter.y -= ny * radiusError * 0.001
     }
-    
-    // Update position
-    letter.x += letter.vx
-    letter.y += letter.vy
     
     letter.life--
     if (letter.life <= 0) {

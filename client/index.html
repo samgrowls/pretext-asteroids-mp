@@ -565,79 +565,68 @@
       }
     }
 
-    // Letter trail - letters follow ship's path with inertia
+    // Letter trail - simple path following with fixed slots
     const letterTrailState = {
       positions: [],  // {x, y, vx, vy} for each letter
-      shipHistory: [],  // Track where ship has been
+      shipPath: [],   // Ship position history
     }
     
     function updateLetterTrail(ship, shipPos) {
-      // Record ship position history (for letters to follow)
-      letterTrailState.shipHistory.push({ x: shipPos.x, y: shipPos.y })
-      if (letterTrailState.shipHistory.length > 60) {
-        letterTrailState.shipHistory.shift()  // Keep last ~1 second
+      // Record ship path
+      letterTrailState.shipPath.push({ x: shipPos.x, y: shipPos.y })
+      if (letterTrailState.shipPath.length > 100) {
+        letterTrailState.shipPath.shift()
       }
       
-      // Initialize trail positions if needed
-      while (letterTrailState.positions.length < (ship.collectedLetters?.length || 0)) {
-        const index = letterTrailState.positions.length
-        const historyIndex = Math.max(0, letterTrailState.shipHistory.length - 1 - index * 4)
-        const histPos = letterTrailState.shipHistory[historyIndex] || { x: shipPos.x, y: shipPos.y }
+      const numLetters = ship.collectedLetters?.length || 0
+      
+      // Initialize or resize trail
+      while (letterTrailState.positions.length < numLetters) {
+        const i = letterTrailState.positions.length
+        // Spawn letter behind ship along path
+        const pathIndex = Math.max(0, letterTrailState.shipPath.length - 1 - i * 6)
+        const pathPos = letterTrailState.shipPath[pathIndex] || shipPos
         letterTrailState.positions.push({
-          x: histPos.x,
-          y: histPos.y,
+          x: pathPos.x + (Math.random() - 0.5) * 10,
+          y: pathPos.y + (Math.random() - 0.5) * 10,
           vx: ship.vx,
           vy: ship.vy,
         })
       }
-      
-      // Trim excess
-      while (letterTrailState.positions.length > (ship.collectedLetters?.length || 0)) {
+      while (letterTrailState.positions.length > numLetters) {
         letterTrailState.positions.pop()
       }
       
-      // Update each letter to follow ship history
+      // Update each letter
       for (let i = 0; i < letterTrailState.positions.length; i++) {
         const letter = letterTrailState.positions[i]
         
-        // Target: where the ship was (or previous letter's position)
-        const historyIndex = Math.max(0, letterTrailState.shipHistory.length - 1 - i * 4)
-        const target = letterTrailState.shipHistory[historyIndex] || letterTrailState.positions[0] || shipPos
+        // Target: position on ship's path (each letter has its own "slot")
+        const pathIndex = Math.max(0, letterTrailState.shipPath.length - 1 - i * 6)
+        const target = letterTrailState.shipPath[pathIndex] || shipPos
         
-        // Simple follow behavior with inertia
-        const dx = target.x - letter.x
-        const dy = target.y - letter.y
-        const dist = Math.hypot(dx, dy)
+        // Simple lerp toward target slot (smooth, no overshoot)
+        const lerpFactor = 0.06
+        letter.x += (target.x - letter.x) * lerpFactor
+        letter.y += (target.y - letter.y) * lerpFactor
         
-        // Accelerate toward target (with limit)
-        if (dist > 5) {
-          const accel = 0.04
-          letter.vx += (dx / dist) * accel * 3
-          letter.vy += (dy / dist) * accel * 3
-        }
+        // Add slight velocity from ship movement
+        letter.vx = ship.vx * 0.3
+        letter.vy = ship.vy * 0.3
         
-        // Separation from other letters
+        // Very gentle separation (prevent exact overlap)
         for (let j = 0; j < letterTrailState.positions.length; j++) {
           if (i === j) continue
           const other = letterTrailState.positions[j]
-          const ox = letter.x - other.x
-          const oy = letter.y - other.y
-          const odist = Math.hypot(ox, oy)
-          
-          if (odist < 18 && odist > 0) {
-            const pushForce = (18 - odist) * 0.002
-            letter.vx += (ox / odist) * pushForce
-            letter.vy += (oy / odist) * pushForce
+          const dx = letter.x - other.x
+          const dy = letter.y - other.y
+          const dist = Math.hypot(dx, dy)
+          if (dist < 12 && dist > 0) {
+            const push = (12 - dist) * 0.01
+            letter.x += dx * push
+            letter.y += dy * push
           }
         }
-        
-        // Damping (creates smooth following, not jittery)
-        letter.vx *= 0.96
-        letter.vy *= 0.96
-        
-        // Update position
-        letter.x += letter.vx
-        letter.y += letter.vy
       }
     }
 
@@ -648,7 +637,7 @@
       updateLetterTrail(ship, shipPos)
       
       // Draw subtle connecting lines
-      ctx.strokeStyle = 'rgba(0, 255, 200, 0.2)'
+      ctx.strokeStyle = 'rgba(0, 255, 200, 0.15)'
       ctx.lineWidth = 1
       ctx.beginPath()
       ctx.moveTo(shipPos.x, shipPos.y)
@@ -657,7 +646,7 @@
       }
       ctx.stroke()
       
-      // Draw letters at their positions
+      // Draw letters
       for (let i = 0; i < letterTrailState.positions.length; i++) {
         const pos = letterTrailState.positions[i]
         const letter = ship.collectedLetters[i]
@@ -672,11 +661,11 @@
         ctx.shadowColor = `hsl(${hue}, 80%, 50%)`
         ctx.shadowBlur = 8
         
-        // Slight tilt based on velocity
-        const angle = Math.atan2(pos.vy, pos.vx) + Math.PI / 2
+        // Slight tilt based on ship velocity
+        const angle = Math.atan2(ship.vy, ship.vx) + Math.PI / 2
         ctx.save()
         ctx.translate(pos.x, pos.y)
-        ctx.rotate(angle * 0.2)
+        ctx.rotate(angle * 0.15)
         ctx.fillText(letter, 0, 0)
         ctx.restore()
       }
