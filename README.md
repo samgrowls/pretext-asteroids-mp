@@ -1,6 +1,6 @@
 # Pretext Asteroids MP
 
-Educational multiplayer asteroids game with SATs spelling challenges. Built with Pretext-style text rendering, Socket.io multiplayer, and (planned) LLM-generated dynamic questions.
+Educational multiplayer asteroids game combining classic arcade gameplay with Year 6 SATs spelling challenges. Built with Pretext-style text rendering, Socket.io multiplayer, and LLM-generated dynamic questions.
 
 **Live Demo:** http://192.168.0.200:3000
 
@@ -13,7 +13,7 @@ bun install
 # Start server
 CLIENT_DIR=./client bun run server/src/index.ts
 
-# LAN access
+# Start with LAN access
 CLIENT_DIR=./client HOST=0.0.0.0 bun run server/src/index.ts
 ```
 
@@ -43,11 +43,19 @@ CLIENT_DIR=./client HOST=0.0.0.0 bun run server/src/index.ts
 - Word Families (structure/construct)
 - Tricky Endings (-ture, -cial, -tial)
 
+## LLM Integration
+
+Dynamic questions are generated using NVIDIA API:
+- **Model:** qwen/qwen3.5-397b-a17b
+- **Context:** Uses letters player has collected
+- **Fallback:** Static SATs database if LLM fails
+- **Timeout:** 5 seconds with automatic fallback
+
 ## Architecture
 
 ```
 client/          # Canvas rendering, Socket.io client
-server/          # Game logic, physics, Socket.io server
+server/          # Game logic, physics, Socket.io server, LLM integration
 shared/          # TypeScript types, SATs database
 ```
 
@@ -56,7 +64,7 @@ shared/          # TypeScript types, SATs database
 - **Runtime:** Bun 1.3.11
 - **Server:** Express + Socket.io
 - **Client:** Vanilla JS + Canvas API
-- **LLM:** NVIDIA API (deepseek-v3.2) - planned
+- **LLM:** NVIDIA API (qwen3.5-397b)
 
 ## Development
 
@@ -71,19 +79,21 @@ git add -A && git commit -m "message" && git push origin main
 ## Current Features
 
 ✅ Core asteroids gameplay
-✅ Letter collection and trails
+✅ HP system with varied asteroid sizes
+✅ Letter drops with rotation physics
+✅ Letter collection and trail system
 ✅ Base deposit with spiral display
 ✅ SATs challenge system
+✅ **LLM dynamic question generation (NVIDIA API)**
 ✅ Multiplayer support
 ✅ Scoring and streaks
-✅ Visual polish (rotation, particles)
+✅ Visual polish (particles, rotation)
 
 ## Planned Features
 
-🔄 LLM dynamic question generation
-⏸️ Pause game during challenges
-🔤 Letter-based bonus system
-📊 Leaderboards
+⏸️ Game pause during challenges
+⏸️ Letter-based bonus system
+⏸️ Drag-and-drop letter selection (optional)
 
 ## Repository
 
@@ -92,5 +102,5 @@ https://github.com/samgrowls/pretext-asteroids-mp
 ## Documentation
 
 - `HANDOFF.md` - Comprehensive developer handoff
+- `QWEN.md` - Agent context and technical details
 - `shared/src/sats-words.ts` - SATs word database
-- `server/src/index.ts` - Main game logic

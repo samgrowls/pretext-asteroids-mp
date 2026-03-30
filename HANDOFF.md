@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-**Pretext Asteroids MP** is an educational multiplayer game that combines classic asteroids gameplay with Year 6 SATs spelling challenges. Players destroy asteroids, collect letter drops, deposit them at base, and complete spelling challenges.
+**Pretext Asteroids MP** is an educational multiplayer game that combines classic asteroids gameplay with Year 6 SATs spelling challenges. Players destroy asteroids, collect letter drops, deposit them at base, and complete spelling challenges generated dynamically by LLM.
 
 **Repository:** https://github.com/samgrowls/pretext-asteroids-mp
 
@@ -21,6 +21,8 @@
    - Letter drops from asteroids (40% chance)
    - Letter collection and trail system
    - Home base with static spiral letter display
+   - Asteroid rotation (gentle spin)
+   - Letter drop rotation
 
 2. **SATs Challenge System**
    - 5 categories: Common Exceptions, Prefixes/Suffixes, Homophones, Word Families, Tricky Endings
@@ -37,18 +39,20 @@
    - Letter trail behind ship (flocking behavior)
    - Static spiral display at base (no jitter)
    - Particle effects (afterburners, explosions, hits)
+   - Radar with relative positions
 
 4. **Multiplayer**
    - Socket.io based
    - Multiple players can play simultaneously
    - Individual challenge tracking
    - Shared game world
+   - Input reset on tab switch (blur handler)
 
 ---
 
 ## Next Steps 📋
 
-### 1. Pause Game During Challenges (MEDIUM PRIORITY)
+### 1. Game Pause During Challenges (MEDIUM PRIORITY)
 
 **Goal:** Freeze game state when challenge panel is open.
 
@@ -70,9 +74,7 @@ for (const player of players.values()) {
 }
 ```
 
----
-
-### 3. Letter-Based Bonus System
+### 2. Letter-Based Bonus System (LOW PRIORITY)
 
 **Goal:** Reward players for using collected letters in answers.
 
@@ -90,9 +92,7 @@ const bonusPoints = usedLetters.filter(l =>
 player.ship.score += points + bonusPoints
 ```
 
----
-
-### 4. Drag-and-Drop Letter Selection (OPTIONAL)
+### 3. Drag-and-Drop Letter Selection (OPTIONAL)
 
 **Consideration:** Instead of typing, players drag letters to fill blanks.
 
@@ -114,7 +114,7 @@ pretext-asteroids-mp/
 ├── server/
 │   ├── src/
 │   │   ├── index.ts        # Main server + game logic
-│   │   └── llm-challenges.ts  # TO CREATE: LLM integration
+│   │   └── llm-challenges.ts  # LLM integration
 │   └── package.json
 ├── shared/
 │   ├── src/
@@ -130,7 +130,7 @@ pretext-asteroids-mp/
 - **Server:** Bun + Express + Socket.io
 - **Client:** Vanilla JS + Canvas API
 - **Shared:** TypeScript types via workspace
-- **LLM:** NVIDIA API (deepseek-v3.2 model)
+- **LLM:** NVIDIA API (qwen3.5-397b model)
 
 ### Key Constants
 ```typescript
@@ -190,25 +190,59 @@ bun run check
 
 ## Testing Checklist
 
-- [ ] Ship movement (thrust, rotation, friction)
-- [ ] Asteroid destruction (HP, breakup)
-- [ ] Letter collection (drops, trail)
-- [ ] Base deposit (spiral display, challenge trigger)
-- [ ] Challenge UI (display, input, submit, result)
-- [ ] Scoring (collection, deposit, correct, streak)
-- [ ] Multiplayer (multiple players, individual challenges)
-- [ ] [ ] LLM challenges (dynamic question generation)
-- [ ] [ ] Game pause during challenges
-- [ ] [ ] Letter-based bonus system
+- [x] Ship movement (thrust, rotation, friction)
+- [x] Asteroid destruction (HP, breakup)
+- [x] Letter collection (drops, trail)
+- [x] Base deposit (spiral display, challenge trigger)
+- [x] Challenge UI (display, input, submit, result)
+- [x] Scoring (collection, deposit, correct, streak)
+- [x] Multiplayer (multiple players, individual challenges)
+- [x] LLM challenges (dynamic question generation)
+- [ ] Game pause during challenges
+- [ ] Letter-based bonus system
+
+---
+
+## LLM Integration Details
+
+### File: `server/src/llm-challenges.ts`
+
+**Key Functions:**
+- `generateLLMChallenge(letters, difficulty)` - Calls NVIDIA API
+- `getCachedChallenge(letters, difficulty)` - With 5-min TTL cache
+- `getFallbackChallenge()` - Static challenge fallback
+
+**API Call:**
+```typescript
+const response = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${NVIDIA_API_KEY}`,
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    model: 'qwen/qwen3.5-397b-a17b',
+    messages: [/* prompt */],
+    temperature: 0.7,
+    max_tokens: 300,
+  }),
+  signal: controller.signal,  // 5s timeout
+})
+```
+
+**Error Handling:**
+- Timeout after 5 seconds
+- Falls back to static challenges
+- Logs errors to console
 
 ---
 
 ## Contact / Notes
 
 - **NVIDIA API Key:** Available in `~/.env`
-- **Recommended Model:** `deepseek-ai/deepseek-v3.2`
+- **Recommended Model:** `qwen/qwen3.5-397b-a17b`
 - **Fallback:** Static SATs challenges in `shared/src/sats-words.ts`
-- **Current Issues:** Base letter jitter (FIXED), challenge timing
+- **Current Issues:** None known
 
 ---
 
@@ -216,9 +250,9 @@ bun run check
 
 1. Read this document
 2. Review `server/src/index.ts` for game logic
-3. Review `shared/src/sats-words.ts` for challenge database
-4. Create `server/src/llm-challenges.ts` for dynamic questions
-5. Test with `bun run server/src/index.ts`
+3. Review `server/src/llm-challenges.ts` for LLM integration
+4. Review `shared/src/sats-words.ts` for challenge database
+5. Test with `CLIENT_DIR=./client bun run server/src/index.ts`
 6. Open `http://localhost:3000` in browser
 
 Good luck! 🚀

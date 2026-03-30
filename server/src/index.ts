@@ -162,7 +162,7 @@ function createAsteroid(x?: number, y?: number, size?: 'large' | 'medium' | 'sma
   }
 
   const angle = Math.random() * Math.PI * 2
-  const speed = ASTEROID_SPEED * (finalSize === 'large' ? 0.6 : finalSize === 'medium' ? 0.9 : 1.2)
+  const speed = 0.5 + Math.random() * 2.5  // Random speed between 0.5-3.0
 
   return {
     id: `a-${Date.now()}-${Math.random()}`,
