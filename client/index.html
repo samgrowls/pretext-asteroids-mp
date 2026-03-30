@@ -619,10 +619,7 @@
 
     // Render asteroid with seamless world wrapping
     function renderAsteroidWrapped(asteroid) {
-      const relX = (asteroid.x - localShip.x) * scale
-        const relY = (asteroid.y - localShip.y) * scale
-        const x = centerX + relX
-        const y = centerY + relY
+      const pos = getWrappedScreenPos(asteroid.x, asteroid.y)
       
       // Cull if off screen
       if (pos.x < -100 || pos.x > window.innerWidth + 100 || pos.y < -100 || pos.y > window.innerHeight + 100) return
@@ -643,10 +640,7 @@
     function renderShipWrapped(ship, isLocal) {
       if (!ship.alive) return
       
-      const relX = (ship.x - localShip.x) * scale
-        const relY = (ship.y - localShip.y) * scale
-        const x = centerX + relX
-        const y = centerY + relY
+      const pos = getWrappedScreenPos(ship.x, ship.y)
       
       // Cull if off screen
       if (pos.x < -50 || pos.x > window.innerWidth + 50 || pos.y < -50 || pos.y > window.innerHeight + 50) return
@@ -953,14 +947,13 @@
       radarCtx.lineWidth = 2
       radarCtx.stroke()
 
-      // Asteroids (gray dots) - wrapped to nearest position
+      // Asteroids (gray dots) - relative to player position
       radarCtx.fillStyle = '#888'
       for (const asteroid of asteroids) {
         const relX = (asteroid.x - localShip.x) * scale
         const relY = (asteroid.y - localShip.y) * scale
         const x = centerX + relX
         const y = centerY + relY
-        // Only draw if within radar bounds
         if (x < 0 || x > size || y < 0 || y > size) continue
         const dotSize = asteroid.size === 'large' ? 2.5 : asteroid.size === 'medium' ? 2 : 1.5
         radarCtx.beginPath()
@@ -968,7 +961,7 @@
         radarCtx.fill()
       }
 
-      // Remote ships (red triangles) - wrapped to nearest position
+      // Remote ships (red triangles) - relative to player position
       for (const ship of remoteShips.values()) {
         if (!ship.alive) continue
         const relX = (ship.x - localShip.x) * scale
@@ -976,7 +969,6 @@
         const x = centerX + relX
         const y = centerY + relY
         if (x < 0 || x > size || y < 0 || y > size) continue
-        // Draw ship pointing in its actual direction
         radarCtx.save()
         radarCtx.translate(x, y)
         radarCtx.rotate(ship.angle + Math.PI / 2)
@@ -990,37 +982,37 @@
         radarCtx.restore()
       }
 
-      // Local ship (green triangle) - centered, pointing in ship's direction
+      // Local ship (green triangle) - centered
       if (localShip.alive && playerId) {
         radarCtx.save()
         radarCtx.translate(centerX, centerY)
-        // Match the main render: angle + PI/2 because ▲ points up by default
         radarCtx.rotate(localShip.angle + Math.PI / 2)
         radarCtx.fillStyle = '#4f4'
         radarCtx.beginPath()
-        radarCtx.moveTo(0, -5)
-        radarCtx.lineTo(-4, 4)
-        radarCtx.lineTo(4, 4)
+        radarCtx.moveTo(0, -4)
+        radarCtx.lineTo(-3, 3)
+        radarCtx.lineTo(3, 3)
         radarCtx.closePath()
         radarCtx.fill()
         radarCtx.restore()
       }
       
-      // Home base (green circle at center of world) - position relative to player
+      // Home base (green circle) - relative to player
       const baseRelX = (BASE_POSITION.x - localShip.x) * scale
       const baseRelY = (BASE_POSITION.y - localShip.y) * scale
       const baseX = centerX + baseRelX
       const baseY = centerY + baseRelY
-      // Always show base on radar (it's a fixed point of reference)
-      radarCtx.fillStyle = 'rgba(0, 255, 136, 0.3)'
-      radarCtx.beginPath()
-      radarCtx.arc(baseX, baseY, 8, 0, Math.PI * 2)  // Fixed size on radar
-      radarCtx.fill()
-      radarCtx.strokeStyle = '#0f8'
-      radarCtx.lineWidth = 1
-      radarCtx.beginPath()
-      radarCtx.arc(baseX, baseY, 6, 0, Math.PI * 2)
-      radarCtx.stroke()
+      if (baseX > 0 && baseX < size && baseY > 0 && baseY < size) {
+        radarCtx.fillStyle = 'rgba(0, 255, 136, 0.3)'
+        radarCtx.beginPath()
+        radarCtx.arc(baseX, baseY, 8, 0, Math.PI * 2)
+        radarCtx.fill()
+        radarCtx.strokeStyle = '#0f8'
+        radarCtx.lineWidth = 1
+        radarCtx.beginPath()
+        radarCtx.arc(baseX, baseY, 6, 0, Math.PI * 2)
+        radarCtx.stroke()
+      }
     }
 
     function renderHUD() {
