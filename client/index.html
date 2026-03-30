@@ -878,11 +878,14 @@
     }
 
     function renderDepositedLetters() {
+      // Render letters at base (static spiral display, no camera wrap)
       for (const drop of depositedLetters) {
-        const pos = getWrappedScreenPos(drop.x, drop.y)
+        // Calculate screen position relative to base (not camera-wrapped)
+        const screenX = drop.x - camera.x
+        const screenY = drop.y - camera.y
         
         // Cull if off screen
-        if (pos.x < -50 || pos.x > window.innerWidth + 50 || pos.y < -50 || pos.y > window.innerHeight + 50) continue
+        if (screenX < -50 || screenX > window.innerWidth + 50 || screenY < -50 || screenY > window.innerHeight + 50) continue
 
         // Fade out near end of life (permanent now)
         const lifeRatio = drop.life / 999999
@@ -908,7 +911,7 @@
         
         // Rotate letter based on deposited angle
         ctx.save()
-        ctx.translate(pos.x, pos.y + floatOffset)
+        ctx.translate(screenX, screenY + floatOffset)
         ctx.rotate((drop.angle || 0) + Math.PI / 2)  // Angle from spiral + upright
         ctx.fillText(drop.letter, 0, 0)
         ctx.restore()

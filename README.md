@@ -1,170 +1,96 @@
 # Pretext Asteroids MP
 
-Multiplayer asteroids game with **Geckos.io** WebRTC networking for low-latency (~20-30ms) gameplay. Built with the text-rendered aesthetic from Pretext.
+Educational multiplayer asteroids game with SATs spelling challenges. Built with Pretext-style text rendering, Socket.io multiplayer, and (planned) LLM-generated dynamic questions.
 
-## 🎮 Features
+**Live Demo:** http://192.168.0.200:3000
 
-- **Large 4000x4000 pixel world** with camera follow
-- **Real-time multiplayer** via WebRTC DataChannels (~20-30ms latency)
-- **Text-rendered graphics** using Pretext glyph caching
-- **Radar/minimap** showing all players and asteroids
-- **Server-authoritative physics** at 60 TPS
-- **Death + respawn** (3 second respawn timer)
-- **Score tracking** (asteroid kills + ship kills)
-- **Live leaderboard** (top 5 players)
-- **Game timer** (3 minute matches)
-- **Teleport mechanic** (emergency dodge with score penalty)
-- **Asteroid physics** (asteroid vs asteroid collisions)
-- **Multiple game modes** (planned): FFA, Teams, CTF, King of the Hill
-
-## 🚀 Quick Start
-
-### Install dependencies
+## Quick Start
 
 ```bash
+# Install
 bun install
-```
 
-### Run development server
-
-```bash
+# Start server
 CLIENT_DIR=./client bun run server/src/index.ts
+
+# LAN access
+CLIENT_DIR=./client HOST=0.0.0.0 bun run server/src/index.ts
 ```
 
-### Open in browser
+## Gameplay
 
-Navigate to `http://localhost:3333`
+1. **Destroy asteroids** - Large (6-8 hits), Medium (3-4), Small (1)
+2. **Collect letters** - 40% drop chance, trail behind ship
+3. **Deposit at base** - Fly to green zone (shown on radar)
+4. **Complete challenges** - SATs sentence completion after 5+ letters
+5. **Earn points** - Collection, deposition, correct spelling, streaks
 
-**For LAN access** (like single-player version):
+## Scoring
+
+| Action | Points |
+|--------|--------|
+| Collect letter | +10 |
+| Deposit letter | +5 |
+| Correct spelling | +50 |
+| Speed bonus (<10s) | +25 |
+| Streak bonus | +10 each |
+
+## Challenge Categories
+
+- Common Exception Words (pedestrian, awkward, summit)
+- Prefixes & Suffixes (decoration, explosion)
+- Homophones (They're/Their/There)
+- Word Families (structure/construct)
+- Tricky Endings (-ture, -cial, -tial)
+
+## Architecture
+
+```
+client/          # Canvas rendering, Socket.io client
+server/          # Game logic, physics, Socket.io server
+shared/          # TypeScript types, SATs database
+```
+
+## Tech Stack
+
+- **Runtime:** Bun 1.3.11
+- **Server:** Express + Socket.io
+- **Client:** Vanilla JS + Canvas API
+- **LLM:** NVIDIA API (deepseek-v3.2) - planned
+
+## Development
 
 ```bash
-# Find your LAN IP
-hostname -I | awk '{print $1}'
+# Type check
+bun run check
 
-# Start server bound to all interfaces
-HOST=0.0.0.0 CLIENT_DIR=./client bun run server/src/index.ts
+# Git workflow
+git add -A && git commit -m "message" && git push origin main
 ```
 
-Then access from other devices: `http://<your-lan-ip>:3333`
+## Current Features
 
-### Controls
+✅ Core asteroids gameplay
+✅ Letter collection and trails
+✅ Base deposit with spiral display
+✅ SATs challenge system
+✅ Multiplayer support
+✅ Scoring and streaks
+✅ Visual polish (rotation, particles)
 
-| Key | Action |
-|-----|--------|
-| W / ↑ | Thrust |
-| A / ← | Rotate left |
-| D / → | Rotate right |
-| Space | Fire |
+## Planned Features
 
-## 🏗️ Architecture
+🔄 LLM dynamic question generation
+⏸️ Pause game during challenges
+🔤 Letter-based bonus system
+📊 Leaderboards
 
-```
-┌──────────────┐         ┌──────────────┐
-│   Client 1   │         │   Client 2   │
-│              │         │              │
-│  Local sim   │◄───────►│  Local sim   │
-│  + predict   │  WebRTC │  + predict   │
-└──────┬───────┘         └──────┬───────┘
-       │                        │
-       └──────────┬─────────────┘
-                  │
-         ┌────────▼────────┐
-         │  Geckos.io      │
-         │  Server         │
-         │  (Authoritative)│
-         └─────────────────┘
-```
+## Repository
 
-## 📁 Project Structure
+https://github.com/samgrowls/pretext-asteroids-mp
 
-```
-pretext-asteroids-mp/
-├── client/          # Browser game client
-│   ├── src/
-│   │   ├── game/    # Game entities
-│   │   ├── net/     # Network code
-│   │   ├── ui/      # HUD, radar, menus
-│   │   └── render/  # Canvas rendering
-│   └── index.html
-├── server/          # Node.js game server
-│   └── src/
-│       ├── game/    # Physics, collisions
-│       ├── modes/   # Game mode logic
-│       └── net/     # Geckos.io server
-└── shared/          # Shared types + constants
-    └── src/
-        └── index.ts
-```
+## Documentation
 
-## 🎯 Development Phases
-
-### Phase 1: Foundation ✅
-- [x] Geckos.io server setup
-- [x] Basic client connection
-- [x] Ship position sync
-- [x] Large world + camera
-- [x] Basic radar
-- [x] Bullets + asteroids
-
-### Phase 2: Combat ✅ (Current)
-- [x] Server-authoritative collisions
-- [x] Ship vs asteroid collisions
-- [x] Ship vs ship bullets
-- [x] Death + respawn (3s timer)
-- [x] Score tracking
-- [x] Game timer (3 min matches)
-- [x] Live leaderboard
-- [x] Teleport mechanic
-- [x] Asteroid replenishment
-
-### Phase 3: Polish (Next)
-- [ ] Client-side prediction
-- [ ] Entity interpolation
-- [ ] Lag compensation
-- [ ] Improved radar (zoom, filters)
-- [ ] Sound effects
-
-### Phase 4: Game Modes
-- [ ] Team Deathmatch
-- [ ] Capture The Flag
-- [ ] King of the Hill
-- [ ] Survival (co-op)
-
-## 🌐 Deployment
-
-### Local network
-
-```bash
-bun run start
-```
-
-Then access from other devices: `http://<your-ip>:3000`
-
-### Production (Docker)
-
-```bash
-docker build -t asteroids-mp ./server
-docker run -p 3000:3000 asteroids-mp
-```
-
-## 📊 Performance
-
-- **Server tick rate:** 60 TPS
-- **Client render:** 60 FPS
-- **Network latency:** ~20-30ms (WebRTC P2P)
-- **World size:** 4000x4000 pixels
-- **Max players:** 8 per room (planned)
-
-## 🛠️ Tech Stack
-
-- **Client:** TypeScript, Canvas API, Geckos.io Client
-- **Server:** Bun, Express, Geckos.io Server
-- **Shared:** TypeScript types + constants
-
-## 📝 License
-
-MIT
-
-## 🙏 Credits
-
-Built on the [Pretext](https://github.com/chenglou/pretext) text layout library.
+- `HANDOFF.md` - Comprehensive developer handoff
+- `shared/src/sats-words.ts` - SATs word database
+- `server/src/index.ts` - Main game logic
