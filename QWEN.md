@@ -113,12 +113,12 @@ git push origin main
 - Letter collection and trail system
 - Base deposit with spiral display
 - SATs challenge UI and logic
+- **LLM dynamic question generation (NVIDIA API, qwen3.5-397b)**
 - Multiplayer support
 - Scoring and streaks
 - Visual polish (particles, rotation)
 
 ### In Progress 🔄
-- LLM dynamic question generation
 - Game pause during challenges
 - Letter-based bonus system
 
@@ -126,43 +126,34 @@ git push origin main
 - Base letters were jittering (FIXED - removed camera wrap)
 - Challenge UI timing (FIXED - added setTimeout)
 
-## LLM Integration (Planned)
+## LLM Integration (COMPLETED ✅)
 
-### NVIDIA API Setup
-```bash
-# Source API key
-source ~/.env  # Contains NVIDIA_API_KEY
-```
-
-### Implementation Plan
+### Implementation
 ```typescript
 // server/src/llm-challenges.ts
-import { NVIDIA_API_KEY } from '../.env'
+import { getCachedChallenge } from './llm-challenges'
 
-async function generateDynamicChallenge(letters: string[]) {
-  const response = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${NVIDIA_API_KEY}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      model: 'deepseek-ai/deepseek-v3.2',
-      messages: [{
-        role: 'user',
-        content: `Generate SATs question using: ${letters.join(', ')}`
-      }],
-      temperature: 0.7,
-      max_tokens: 200
-    })
-  })
-  return await response.json()
-}
+// In startChallenge():
+const collectedLetters = Array.from(player.collectedLetterSet)
+const llmChallenge = await getCachedChallenge(collectedLetters, 'medium')
+
+// Falls back to static challenges if LLM fails
 ```
 
-### Model Selection
-- **Primary:** `deepseek-ai/deepseek-v3.2`
-- **Fallback:** Static templates in `sats-words.ts`
+### API Details
+- **Model:** qwen/qwen3.5-397b-a17b
+- **Endpoint:** https://integrate.api.nvidia.com/v1/chat/completions
+- **Key:** NVIDIA_API_KEY from ~/.env
+- **Caching:** 50 challenge cache to prevent duplicate calls
+- **Fallback:** Static SATs database if LLM fails
+
+### Challenge Flow
+1. Player deposits 5+ letters at base
+2. System collects unique letters from player
+3. LLM generates question using those letters
+4. Question sent to player via Socket.io
+5. Player submits answer
+6. Server validates and awards points
 
 ## Socket Events
 

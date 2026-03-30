@@ -25,6 +25,7 @@
 2. **SATs Challenge System**
    - 5 categories: Common Exceptions, Prefixes/Suffixes, Homophones, Word Families, Tricky Endings
    - 40+ sentence templates with blanks
+   - **LLM dynamic question generation** using NVIDIA API (qwen3.5-397b)
    - Challenge triggers after depositing 5+ letters
    - Scoring: 50pts correct, +25 speed bonus, +10 streak
    - Challenge UI with timer, hints, and feedback
@@ -45,67 +46,9 @@
 
 ---
 
-## Known Issues / Next Steps 📋
+## Next Steps 📋
 
-### 1. LLM Integration for Dynamic Questions (HIGH PRIORITY)
-
-**Goal:** Use NVIDIA API (deepseek-v3.2 model) to generate dynamic SATs questions using the letters players have collected.
-
-**Implementation Plan:**
-```javascript
-// Server-side (server/src/llm-challenges.ts)
-import { NVIDIA_API_KEY } from '../.env'
-
-async function generateDynamicChallenge(collectedLetters: string[]) {
-  const prompt = `
-    Generate a Year 6 SATs spelling question using these letters: ${collectedLetters.join(', ')}
-    
-    Format:
-    - Sentence with one blank (_____)
-    - Answer must use at least 3 of the provided letters
-    - Category: commonExceptions|prefixesSuffixes|homophones|wordFamilies|trickyEndings
-    - Include a hint
-    
-    Return JSON:
-    {
-      "sentence": "The _____ was very tall.",
-      "answer": "building",
-      "category": "wordFamilies",
-      "hint": "Something constructed"
-    }
-  `
-  
-  const response = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${NVIDIA_API_KEY}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      model: 'deepseek-ai/deepseek-v3.2',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.7,
-      max_tokens: 200
-    })
-  })
-  
-  return await response.json()
-}
-```
-
-**Files to Create:**
-- `server/src/llm-challenges.ts` - LLM integration
-- `server/src/dynamic-challenges.ts` - Challenge generation logic
-- `.env` - API keys (already available via `~/.env`)
-
-**Changes Needed:**
-- Modify `startChallenge()` in `server/src/index.ts` to call LLM
-- Store generated challenges in player state
-- Add fallback to static challenges if LLM fails
-
----
-
-### 2. Pause Game During Challenges
+### 1. Pause Game During Challenges (MEDIUM PRIORITY)
 
 **Goal:** Freeze game state when challenge panel is open.
 
