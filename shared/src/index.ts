@@ -71,11 +71,23 @@ export type BulletState = {
   life?: number
 }
 
+export type LetterDrop = {
+  id: string
+  x: number
+  y: number
+  vx: number
+  vy: number
+  letter: string
+  life: number
+  collected: boolean
+}
+
 export type GameState = {
   mode: string
   ships: ShipState[]
   asteroids: AsteroidState[]
   bullets: BulletState[]
+  letterDrops: LetterDrop[]
   timeRemaining: number
   round: number
 }

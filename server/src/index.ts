@@ -22,6 +22,27 @@ const RESPAWN_TIME = 3000 // ms
 const GAME_DURATION = 180000 // 3 minutes in ms
 const WINNING_SCORE = 500
 
+// Year 6 SATs common words (subset of most frequent)
+const SATS_WORDS = [
+  'achieve', 'address', 'answer', 'appear', 'arrive', 'believe', 'breath', 'bridge',
+  'build', 'business', 'calendar', 'caught', 'centre', 'century', 'certain', 'circle',
+  'complete', 'consider', 'continue', 'decide', 'describe', 'different', 'difficult',
+  'discover', 'early', 'earth', 'eight', 'enough', 'exercise', 'experience', 'famous',
+  'favourite', 'february', 'foreign', 'forty', 'forward', 'friend', 'grammar', 'group',
+  'guard', 'guide', 'happen', 'height', 'history', 'hour', 'important', 'improve',
+  'island', 'january', 'knowledge', 'learn', 'length', 'letter', 'light', 'march',
+  'material', 'maybe', 'measure', 'minute', 'month', 'natural', 'naughty', 'necessary',
+  'notice', 'november', 'number', 'occur', 'often', 'order', 'ought', 'people',
+  'please', 'popular', 'position', 'possible', 'potato', 'power', 'pressure', 'probably',
+  'promise', 'purpose', 'quarter', 'question', 'recent', 'regular', 'remember', 'special',
+  'straight', 'street', 'strong', 'sudden', 'suppose', 'system', 'table', 'perhaps',
+  'temperature', 'therefore', 'thirteen', 'thirty', 'thought', 'through', 'thursday',
+  'tongue', 'tonight', 'tuesday', 'various', 'vegetable', 'vehicle', 'wednesday',
+  'weight', 'winter', 'wonder', 'working', 'world', 'write', 'yellow', 'yesterday'
+]
+
+const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+
 // --- Game Types ---
 type Player = {
   id: string
@@ -44,6 +65,7 @@ type GameModeConfig = {
 const players = new Map<string, Player>()
 const asteroids: AsteroidState[] = []
 const bullets: BulletState[] = []
+const letterDrops: LetterDrop[] = []
 let gameStateSeq = 0
 
 let gameMode: GameModeConfig = {
@@ -139,24 +161,51 @@ function createAsteroid(x?: number, y?: number, size?: 'large' | 'medium' | 'sma
   }
 }
 
-// Split asteroid with mass conservation and varied fragments
+// Split asteroid with proper mass conservation based on actual radius
 function splitAsteroid(asteroid: AsteroidState): AsteroidState[] {
   if (asteroid.size === 'small') return []
   
   const fragments: AsteroidState[] = []
   
-  // Mass-conserving breakup with varied sizes
+  // Calculate parent "mass" (area proportional to radius squared)
+  const parentMass = Math.PI * asteroid.radius * asteroid.radius
+  
   if (asteroid.size === 'large') {
-    // Large can break into: 2-3 pieces (mix of medium/small)
-    const fragmentCount = 2 + Math.floor(Math.random() * 2) // 2 or 3
-    for (let i = 0; i < fragmentCount; i++) {
-      const isMedium = Math.random() > 0.4 || i < 2 // At least 2 medium
-      fragments.push(createAsteroid(asteroid.x, asteroid.y, isMedium ? 'medium' : 'small'))
+    // Large breaks into varied fragments conserving ~60-80% of mass
+    // Options: 3 medium, 2 medium + 2 small, 1 medium + 3 small, etc.
+    const breakupType = Math.floor(Math.random() * 4)
+    
+    if (breakupType === 0) {
+      // 3 medium fragments (~33% mass each)
+      for (let i = 0; i < 3; i++) {
+        fragments.push(createAsteroid(asteroid.x, asteroid.y, 'medium'))
+      }
+    } else if (breakupType === 1) {
+      // 2 medium + 2 small
+      for (let i = 0; i < 2; i++) {
+        fragments.push(createAsteroid(asteroid.x, asteroid.y, 'medium'))
+      }
+      for (let i = 0; i < 2; i++) {
+        fragments.push(createAsteroid(asteroid.x, asteroid.y, 'small'))
+      }
+    } else if (breakupType === 2) {
+      // 1 medium + 3-4 small
+      fragments.push(createAsteroid(asteroid.x, asteroid.y, 'medium'))
+      const smallCount = 3 + Math.floor(Math.random() * 2)
+      for (let i = 0; i < smallCount; i++) {
+        fragments.push(createAsteroid(asteroid.x, asteroid.y, 'small'))
+      }
+    } else {
+      // 4-5 small fragments
+      const smallCount = 4 + Math.floor(Math.random() * 2)
+      for (let i = 0; i < smallCount; i++) {
+        fragments.push(createAsteroid(asteroid.x, asteroid.y, 'small'))
+      }
     }
   } else if (asteroid.size === 'medium') {
-    // Medium breaks into: 1-2 small
-    const fragmentCount = 1 + Math.floor(Math.random() * 2) // 1 or 2
-    for (let i = 0; i < fragmentCount; i++) {
+    // Medium breaks into 2-3 small fragments
+    const smallCount = 2 + Math.floor(Math.random() * 2)
+    for (let i = 0; i < smallCount; i++) {
       fragments.push(createAsteroid(asteroid.x, asteroid.y, 'small'))
     }
   }
@@ -176,6 +225,36 @@ function splitAsteroid(asteroid: AsteroidState): AsteroidState[] {
 // Initialize asteroids
 for (let i = 0; i < 50; i++) {
   asteroids.push(createAsteroid())
+}
+
+// Spawn letter drop at position
+function spawnLetterDrop(x: number, y: number, vx: number, vy: number) {
+  // 40% chance to drop a letter
+  if (Math.random() > 0.4) return
+  
+  const letter = LETTERS[Math.floor(Math.random() * LETTERS.length)]
+  letterDrops.push({
+    id: `l-${Date.now()}-${Math.random()}`,
+    x, y,
+    vx: vx * 0.5 + (Math.random() - 0.5) * 2,
+    vy: vy * 0.5 + (Math.random() - 0.5) * 2,
+    letter,
+    life: 600, // 10 seconds at 60fps
+    collected: false,
+  })
+}
+
+// Check if player collected any letters
+function checkLetterCollection(player: Player) {
+  const collectionRadius = 30
+  for (const drop of letterDrops) {
+    if (drop.collected) continue
+    if (distance(player.ship, drop) < collectionRadius) {
+      drop.collected = true
+      player.ship.score += 10 // Bonus points for collecting
+      console.log(`[LETTER] ${player.name} collected '${drop.letter}'`)
+    }
+  }
 }
 
 // --- Player Management ---
@@ -254,6 +333,7 @@ function broadcastState() {
     ships: Array.from(players.values()).map(p => p.ship),
     asteroids,
     bullets,
+    letterDrops: letterDrops.filter(d => !d.collected), // Only send uncollected
     gameActive,
     timeRemaining: gameActive ? Math.max(0, gameMode.duration - (Date.now() - gameStartTime)) : 0,
   }
@@ -500,12 +580,26 @@ function updatePhysics() {
 
         // Only destroy if HP depleted
         if (asteroid.hp <= 0) {
+          // Store velocity for letter spawn
+          const asteroidVx = asteroid.vx
+          const asteroidVy = asteroid.vy
+          
           // Split asteroid using the new varied split function
           if (asteroid.size !== 'small') {
             const fragments = splitAsteroid(asteroid)
             asteroids.splice(ai, 1, ...fragments)
           } else {
             asteroids.splice(ai, 1)
+          }
+
+          // Spawn letter drop(s) based on asteroid size
+          if (asteroid.size === 'large') {
+            spawnLetterDrop(hitX, hitY, asteroidVx, asteroidVy)
+            if (Math.random() > 0.5) {
+              spawnLetterDrop(hitX, hitY, asteroidVx, asteroidVy)
+            }
+          } else if (asteroid.size === 'medium') {
+            spawnLetterDrop(hitX, hitY, asteroidVx, asteroidVy)
           }
 
           const owner = players.get(bullet.ownerId)
@@ -609,6 +703,29 @@ function updatePhysics() {
   
   while (asteroids.length < 30) {
     asteroids.push(createAsteroid())
+  }
+
+  // Update letter drops
+  for (let i = letterDrops.length - 1; i >= 0; i--) {
+    const drop = letterDrops[i]!
+    drop.x += drop.vx
+    drop.y += drop.vy
+    const wrapped = wrapPosition(drop.x, drop.y)
+    drop.x = wrapped.x
+    drop.y = wrapped.y
+    drop.life--
+    
+    // Remove if expired or collected
+    if (drop.life <= 0 || drop.collected) {
+      letterDrops.splice(i, 1)
+    }
+  }
+
+  // Check letter collection for all players
+  for (const player of players.values()) {
+    if (player.ship.alive) {
+      checkLetterCollection(player)
+    }
   }
 }
 
