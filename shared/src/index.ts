@@ -57,6 +57,8 @@ export type AsteroidState = {
   radius: number
   size: 'large' | 'medium' | 'small'
   vertices: Vector2[]
+  hp: number
+  maxHp: number
 }
 
 export type BulletState = {

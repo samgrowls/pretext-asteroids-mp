@@ -75,11 +75,24 @@ function distance(a: { x: number; y: number }, b: { x: number; y: number }): num
 }
 
 // --- Asteroid Generation ---
-function createAsteroid(x?: number, y?: number, size?: 'large' | 'medium' | 'small'): AsteroidState {
+function createAsteroid(x?: number, y?: number, size?: 'large' | 'medium' | 'small', hp?: number): AsteroidState {
   const finalSize = size ?? (Math.random() > 0.6 ? 'large' : Math.random() > 0.3 ? 'medium' : 'small')
-  const baseRadius = finalSize === 'large' ? 50 : finalSize === 'medium' ? 30 : 18
   
-  // Moderate vertex count - enough for irregularity but not crazy
+  // Varied radius within each size category
+  const baseRadius = finalSize === 'large' 
+    ? 40 + Math.random() * 25    // 40-65 (was fixed 50)
+    : finalSize === 'medium'
+      ? 22 + Math.random() * 14  // 22-36 (was fixed 30)
+      : 12 + Math.random() * 10  // 12-22 (was fixed 18)
+  
+  // Health based on size and radius (larger = more HP)
+  const health = hp ?? (finalSize === 'large' 
+    ? Math.floor(baseRadius / 10) + 2  // 6-8 HP for large
+    : finalSize === 'medium'
+      ? Math.floor(baseRadius / 10) + 1  // 3-4 HP for medium
+      : 1)  // 1 HP for small
+
+  // More varied vertex count for irregular shapes
   const vertexCount = finalSize === 'large' 
     ? 8 + Math.floor(Math.random() * 4)   // 8-11 vertices
     : finalSize === 'medium' 
@@ -93,15 +106,15 @@ function createAsteroid(x?: number, y?: number, size?: 'large' | 'medium' | 'sma
   let currentAngle = Math.random() * Math.PI * 2
   for (let i = 0; i < vertexCount; i++) {
     angles.push(currentAngle)
-    // Moderate angle gap variation (0.5 to 0.9 radians) - keeps it somewhat circular
+    // Moderate angle gap variation (0.5 to 0.9 radians)
     currentAngle += 0.5 + Math.random() * 0.4
   }
   angles.sort((a, b) => a - b)
 
-  // Create vertices with moderate radius variation (more circular)
+  // Create vertices with moderate radius variation
   for (let i = 0; i < angles.length; i++) {
     const angle = angles[i]!
-    // Moderate variance: 0.7 to 1.3 (subtle irregularity, still mostly circular)
+    // Moderate variance: 0.7 to 1.3 (subtle irregularity)
     const variance = 0.7 + Math.random() * 0.6
     vertices.push({
       x: Math.cos(angle) * baseRadius * variance,
@@ -121,36 +134,40 @@ function createAsteroid(x?: number, y?: number, size?: 'large' | 'medium' | 'sma
     radius: baseRadius,
     size: finalSize,
     vertices,
+    hp: health,
+    maxHp: health,
   }
 }
 
-// Split asteroid into varied sizes
+// Split asteroid with mass conservation and varied fragments
 function splitAsteroid(asteroid: AsteroidState): AsteroidState[] {
   if (asteroid.size === 'small') return []
   
   const fragments: AsteroidState[] = []
   
+  // Mass-conserving breakup with varied sizes
   if (asteroid.size === 'large') {
-    // Large breaks into: 1 medium + 2 small (varied)
-    fragments.push(createAsteroid(asteroid.x, asteroid.y, 'medium'))
-    fragments.push(createAsteroid(asteroid.x, asteroid.y, 'small'))
-    if (Math.random() > 0.5) {
-      fragments.push(createAsteroid(asteroid.x, asteroid.y, 'small'))
+    // Large can break into: 2-3 pieces (mix of medium/small)
+    const fragmentCount = 2 + Math.floor(Math.random() * 2) // 2 or 3
+    for (let i = 0; i < fragmentCount; i++) {
+      const isMedium = Math.random() > 0.4 || i < 2 // At least 2 medium
+      fragments.push(createAsteroid(asteroid.x, asteroid.y, isMedium ? 'medium' : 'small'))
     }
   } else if (asteroid.size === 'medium') {
-    // Medium breaks into: 1-2 small (varied)
-    fragments.push(createAsteroid(asteroid.x, asteroid.y, 'small'))
-    if (Math.random() > 0.4) {
+    // Medium breaks into: 1-2 small
+    const fragmentCount = 1 + Math.floor(Math.random() * 2) // 1 or 2
+    for (let i = 0; i < fragmentCount; i++) {
       fragments.push(createAsteroid(asteroid.x, asteroid.y, 'small'))
     }
   }
   
-  // Tamer breakup velocities
+  // Tamer breakup velocities with some inheritance from parent
   for (const fragment of fragments) {
     const spreadAngle = Math.random() * Math.PI * 2
-    const spreadSpeed = 0.5 + Math.random() * 1.5  // Much tamer: 0.5-2.0
-    fragment.vx += Math.cos(spreadAngle) * spreadSpeed
-    fragment.vy += Math.sin(spreadAngle) * spreadSpeed
+    const spreadSpeed = 0.5 + Math.random() * 1.5
+    // Inherit some parent velocity
+    fragment.vx = asteroid.vx * 0.3 + Math.cos(spreadAngle) * spreadSpeed
+    fragment.vy = asteroid.vy * 0.3 + Math.sin(spreadAngle) * spreadSpeed
   }
   
   return fragments
@@ -465,23 +482,13 @@ function updatePhysics() {
       const asteroid = asteroids[ai]!
       if (distance(bullet, asteroid) < asteroid.radius) {
         bulletHit = true
-        
+
         // Store hit position for particle event
         const hitX = asteroid.x
         const hitY = asteroid.y
 
-        // Split asteroid using the new varied split function
-        if (asteroid.size !== 'small') {
-          const fragments = splitAsteroid(asteroid)
-          asteroids.splice(ai, 1, ...fragments)
-        } else {
-          asteroids.splice(ai, 1)
-        }
-
-        const owner = players.get(bullet.ownerId)
-        if (owner) {
-          owner.ship.score += asteroid.size === 'large' ? 20 : asteroid.size === 'medium' ? 50 : 100
-        }
+        // Damage asteroid
+        asteroid.hp--
         
         // Send hit particle event to all clients
         io.emit('event', {
@@ -490,6 +497,22 @@ function updatePhysics() {
           y: hitY,
           size: asteroid.size,
         })
+
+        // Only destroy if HP depleted
+        if (asteroid.hp <= 0) {
+          // Split asteroid using the new varied split function
+          if (asteroid.size !== 'small') {
+            const fragments = splitAsteroid(asteroid)
+            asteroids.splice(ai, 1, ...fragments)
+          } else {
+            asteroids.splice(ai, 1)
+          }
+
+          const owner = players.get(bullet.ownerId)
+          if (owner) {
+            owner.ship.score += asteroid.size === 'large' ? 20 : asteroid.size === 'medium' ? 50 : 100
+          }
+        }
 
         break
       }
@@ -569,10 +592,10 @@ function updatePhysics() {
           const totalMass = m1 + m2
           const impulse = (2 * dvn) / totalMass
           
-          a1.vx -= impulse * m2 * nx
-          a1.vy -= impulse * m2 * ny
-          a2.vx += impulse * m1 * nx
-          a2.vy += impulse * m1 * ny
+          a1.vx -= impulse * m2 * nx * 0.7
+          a1.vy -= impulse * m2 * ny * 0.7
+          a2.vx += impulse * m1 * nx * 0.7
+          a2.vy += impulse * m1 * ny * 0.7
           
           const overlap = minDist - dist
           a1.x -= nx * overlap * 0.5
