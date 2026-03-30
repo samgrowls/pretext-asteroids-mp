@@ -7,6 +7,7 @@ import {
   type ShipState, type AsteroidState, type BulletState, type InputState, DEFAULT_INPUT
 } from '@asteroids/shared'
 import { SATS_CATEGORIES, SATS_CHALLENGES, SCORING } from '@asteroids/shared/sats-words'
+import { getCachedChallenge, type LLMChallenge } from './llm-challenges'
 
 const PORT = process.env.PORT || 3000
 const CLIENT_DIR = process.env.CLIENT_DIR || '../../client'
@@ -57,11 +58,14 @@ type Player = {
   respawnTime?: number
   // Challenge state
   depositedLetterCount: number  // Total letters deposited
+  collectedLetterSet: Set<string>  // Unique letters for LLM
   currentChallenge?: {
     category: string
     sentenceIndex: number
     startTime: number
     usedHints: number
+    isLLM: boolean
+    llmChallenge?: LLMChallenge
   }
   challengeStreak: number  // Consecutive correct answers
 }
@@ -293,6 +297,11 @@ function checkBaseDeposit(player: Player) {
     ship.score += deposited * 5  // Bonus for depositing
     player.depositedLetterCount += deposited
     
+    // Track unique letters for LLM challenge generation
+    for (const letter of ship.collectedLetters) {
+      player.collectedLetterSet.add(letter.toUpperCase())
+    }
+    
     // Add letters to static display around base (no expiry, no physics)
     const totalLetters = depositedLetters.length
     for (let i = 0; i < deposited; i++) {
@@ -316,7 +325,7 @@ function checkBaseDeposit(player: Player) {
       depositedLetters.shift()
     }
     
-    // Trigger challenge if player has 5+ letters deposited
+    // Trigger challenge if player has 5+ letters deposited and no active challenge
     if (player.depositedLetterCount >= 5 && !player.currentChallenge) {
       startChallenge(player)
     }
@@ -324,30 +333,59 @@ function checkBaseDeposit(player: Player) {
 }
 
 // Start a new SATs challenge for player
-function startChallenge(player: Player) {
+async function startChallenge(player: Player) {
+  // Get collected letters for LLM generation
+  const collectedLetters = Array.from(player.collectedLetterSet)
+  
+  // Try LLM generation first, fallback to static
+  const llmChallenge = await getCachedChallenge(collectedLetters, 'medium')
+  
+  const isLLM = llmChallenge !== null
+  const challenge = llmChallenge || getStaticChallenge()
+  
+  if (!challenge) return
+  
+  player.currentChallenge = {
+    category: challenge.category,
+    sentenceIndex: -1,  // -1 means LLM-generated
+    startTime: Date.now(),
+    usedHints: 0,
+    isLLM,
+    llmChallenge: isLLM ? llmChallenge : undefined,
+  }
+  
+  // Notify player
+  io.to(player.id).emit('challenge-start', {
+    category: SATS_CATEGORIES[challenge.category as keyof typeof SATS_CATEGORIES] || challenge.category,
+    sentence: {
+      text: challenge.sentence,
+      answer: challenge.answer,
+      hint: challenge.hint,
+    },
+    isLLM,
+  })
+  
+  console.log(`[CHALLENGE] ${player.name} started ${isLLM ? 'LLM' : 'static'} ${challenge.category} challenge`)
+}
+
+// Get static challenge from database
+function getStaticChallenge() {
   const categories = Object.keys(SATS_CATEGORIES)
   const category = categories[Math.floor(Math.random() * categories.length)]
   
   // Get challenges for this category
   const categoryChallenges = SATS_CHALLENGES.find(c => c.category === category)
-  if (!categoryChallenges) return
+  if (!categoryChallenges) return null
   
   const sentenceIndex = Math.floor(Math.random() * categoryChallenges.sentences.length)
+  const sentence = categoryChallenges.sentences[sentenceIndex]
   
-  player.currentChallenge = {
-    category,
-    sentenceIndex,
-    startTime: Date.now(),
-    usedHints: 0,
+  return {
+    sentence: sentence.text,
+    answer: sentence.answer,
+    category: category,
+    hint: sentence.hint,
   }
-  
-  // Notify player
-  io.to(player.id).emit('challenge-start', {
-    category: SATS_CATEGORIES[category as keyof typeof SATS_CATEGORIES],
-    sentence: categoryChallenges.sentences[sentenceIndex],
-  })
-  
-  console.log(`[CHALLENGE] ${player.name} started ${category} challenge`)
 }
 
 // --- Player Management ---
@@ -384,6 +422,7 @@ function createPlayer(id: string, name: string): Player {
     inputSeq: 0,
     fireCooldown: 0,
     depositedLetterCount: 0,
+    collectedLetterSet: new Set(),
     challengeStreak: 0,
   }
 }
@@ -433,19 +472,34 @@ function broadcastState() {
     depositedLetters,  // Letters floating at base
     gameActive,
     timeRemaining: gameActive ? Math.max(0, gameMode.duration - (Date.now() - gameStartTime)) : 0,
-    // Challenge state per player (only send to relevant player via socket)
   }
   io.emit('state', state)
   
   // Send challenge state to players who have active challenges
   for (const [playerId, player] of players.entries()) {
     if (player.currentChallenge) {
-      const categoryChallenges = SATS_CHALLENGES.find(c => c.category === player.currentChallenge?.category)
-      if (categoryChallenges) {
+      let sentence = null
+      
+      if (player.currentChallenge.isLLM && player.currentChallenge.llmChallenge) {
+        sentence = {
+          text: player.currentChallenge.llmChallenge.sentence,
+          answer: player.currentChallenge.llmChallenge.answer,
+          hint: player.currentChallenge.llmChallenge.hint,
+        }
+      } else if (player.currentChallenge.sentenceIndex >= 0) {
+        const categoryChallenges = SATS_CHALLENGES.find(c => c.category === player.currentChallenge?.category)
+        if (categoryChallenges) {
+          const s = categoryChallenges.sentences[player.currentChallenge.sentenceIndex]
+          sentence = { text: s.text, answer: s.answer, hint: s.hint }
+        }
+      }
+      
+      if (sentence) {
         io.to(playerId).emit('challenge-active', {
-          category: SATS_CATEGORIES[player.currentChallenge.category as keyof typeof SATS_CATEGORIES],
-          sentence: categoryChallenges.sentences[player.currentChallenge.sentenceIndex],
+          category: SATS_CATEGORIES[player.currentChallenge.category as keyof typeof SATS_CATEGORIES] || player.currentChallenge.category,
+          sentence,
           timeElapsed: Date.now() - player.currentChallenge.startTime,
+          isLLM: player.currentChallenge.isLLM,
         })
       }
     }
@@ -563,17 +617,24 @@ io.on('connection', (socket) => {
   })
   
   // Handle challenge answer
-  socket.on('challenge-answer', (data: { answer: string }) => {
+  socket.on('challenge-answer', async (data: { answer: string }) => {
     const player = players.get(socket.id)
     if (!player || !player.currentChallenge) return
     
-    const categoryChallenges = SATS_CHALLENGES.find(c => c.category === player.currentChallenge?.category)
-    if (!categoryChallenges) return
+    // Get the correct answer from LLM challenge or static
+    let correctAnswer = ''
+    if (player.currentChallenge.isLLM && player.currentChallenge.llmChallenge) {
+      correctAnswer = player.currentChallenge.llmChallenge.answer
+    } else if (player.currentChallenge.sentenceIndex >= 0) {
+      const categoryChallenges = SATS_CHALLENGES.find(c => c.category === player.currentChallenge?.category)
+      if (categoryChallenges) {
+        correctAnswer = categoryChallenges.sentences[player.currentChallenge.sentenceIndex]?.answer || ''
+      }
+    }
     
-    const challenge = categoryChallenges.sentences[player.currentChallenge.sentenceIndex]
-    if (!challenge) return
+    if (!correctAnswer) return
     
-    const isCorrect = data.answer.toLowerCase().trim() === challenge.answer.toLowerCase()
+    const isCorrect = data.answer.toLowerCase().trim() === correctAnswer.toLowerCase()
     const timeTaken = (Date.now() - player.currentChallenge.startTime) / 1000
     
     let points = 0
@@ -592,7 +653,7 @@ io.on('connection', (socket) => {
     // Send result to player
     socket.emit('challenge-result', {
       correct: isCorrect,
-      correctAnswer: challenge.answer,
+      correctAnswer,
       points,
       streak: player.challengeStreak,
     })
