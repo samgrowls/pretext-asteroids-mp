@@ -770,21 +770,29 @@ function updatePhysics() {
     }
   }
 
-  // Update deposited letters at base (float around base)
+  // Update deposited letters at base (float gently around base)
   for (let i = depositedLetters.length - 1; i >= 0; i--) {
     const letter = depositedLetters[i]!
+    
+    // Gentle orbital motion around base center
+    const dx = letter.x - BASE_POSITION.x
+    const dy = letter.y - BASE_POSITION.y
+    const dist = Math.hypot(dx, dy)
+    
+    // Add gentle tangential velocity (orbit)
+    if (dist > 10 && dist < BASE_RADIUS * 0.7) {
+      const orbitSpeed = 0.0005
+      letter.vx += -dy * orbitSpeed
+      letter.vy += dx * orbitSpeed
+    }
+    
+    // Gentle damping (no aggressive center pull)
+    letter.vx *= 0.995
+    letter.vy *= 0.995
+    
+    // Update position
     letter.x += letter.vx
     letter.y += letter.vy
-    
-    // Gentle drift toward base center
-    const dx = BASE_POSITION.x - letter.x
-    const dy = BASE_POSITION.y - letter.y
-    letter.vx += dx * 0.0001
-    letter.vy += dy * 0.0001
-    
-    // Damping
-    letter.vx *= 0.99
-    letter.vy *= 0.99
     
     letter.life--
     if (letter.life <= 0) {

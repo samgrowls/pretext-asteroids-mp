@@ -565,18 +565,24 @@
       }
     }
 
-    // Letter trail with flocking behavior
+    // Letter trail with simple flocking behavior
     const letterTrailState = {
       positions: [],  // {x, y, vx, vy} for each letter
-      targetPos: null,  // Where letters are flocking to
     }
     
     function updateLetterTrail(ship, shipPos) {
+      const shipAngle = ship.angle + Math.PI / 2  // Ship facing direction
+      const maxSpeed = 4
+      const maxForce = 0.15  // Steering force
+      
       // Initialize trail positions if needed
       while (letterTrailState.positions.length < (ship.collectedLetters?.length || 0)) {
+        // Spawn new letter behind ship
+        const offset = 40 + letterTrailState.positions.length * 25
+        const spawnAngle = shipAngle + Math.PI
         letterTrailState.positions.push({
-          x: shipPos.x,
-          y: shipPos.y,
+          x: shipPos.x + Math.cos(spawnAngle) * offset,
+          y: shipPos.y + Math.sin(spawnAngle) * offset,
           vx: ship.vx,
           vy: ship.vy,
         })
@@ -587,48 +593,62 @@
         letterTrailState.positions.pop()
       }
       
-      // Target position follows ship with offset
-      const trailOffset = 35
-      const trailAngle = ship.angle + Math.PI / 2 + Math.PI
-      letterTrailState.targetPos = {
-        x: shipPos.x + Math.cos(trailAngle) * trailOffset,
-        y: shipPos.y + Math.sin(trailAngle) * trailOffset,
-        vx: ship.vx,
-        vy: ship.vy,
-      }
-      
-      // Update each letter with flocking behavior
+      // Update each letter with flocking rules
       for (let i = 0; i < letterTrailState.positions.length; i++) {
         const letter = letterTrailState.positions[i]
         
-        // Target for this letter (each follows the one before it)
-        const target = i === 0 ? letterTrailState.targetPos : letterTrailState.positions[i - 1]
-        const followDistance = 22 + i * 3  // Letters spread out slightly
+        // Determine target (ship for first letter, previous letter for others)
+        const target = i === 0 ? shipPos : letterTrailState.positions[i - 1]
+        const desiredSeparation = 25 + i * 2  // Letters maintain spacing
         
-        // Calculate desired velocity toward target
+        // SEEK: Steer toward target
+        let steerX = 0, steerY = 0
         const dx = target.x - letter.x
         const dy = target.y - letter.y
         const dist = Math.hypot(dx, dy)
         
-        if (dist > 0.1) {
-          // Steer toward target
-          const desiredVx = (dx / dist) * 3  // Max speed
-          const desiredVy = (dy / dist) * 3
+        if (dist > desiredSeparation) {
+          // Move toward target
+          const desiredVx = (dx / dist) * maxSpeed
+          const desiredVy = (dy / dist) * maxSpeed
+          steerX += (desiredVx - letter.vx) * maxForce
+          steerY += (desiredVy - letter.vy) * maxForce
+        } else if (dist < desiredSeparation * 0.7) {
+          // Too close - slow down
+          letter.vx *= 0.92
+          letter.vy *= 0.92
+        }
+        
+        // SEPARATION: Avoid crowding other letters
+        for (let j = 0; j < letterTrailState.positions.length; j++) {
+          if (i === j) continue
+          const other = letterTrailState.positions[j]
+          const ox = letter.x - other.x
+          const oy = letter.y - other.y
+          const odist = Math.hypot(ox, oy)
           
-          // Smooth steering (not instant)
-          const steerStrength = 0.08
-          letter.vx += (desiredVx - letter.vx) * steerStrength
-          letter.vy += (desiredVy - letter.vy) * steerStrength
-          
-          // Add some noise/swirl for organic motion
-          const noise = Math.sin(Date.now() * 0.005 + i * 0.8) * 0.5
-          letter.vx += Math.cos(noise) * 0.1
-          letter.vy += Math.sin(noise) * 0.1
+          if (odist < 20 && odist > 0) {
+            // Push away from neighbors
+            const pushForce = (20 - odist) / 20 * 0.08
+            steerX += (ox / odist) * pushForce
+            steerY += (oy / odist) * pushForce
+          }
+        }
+        
+        // Apply steering
+        letter.vx += steerX
+        letter.vy += steerY
+        
+        // Speed limit
+        const speed = Math.hypot(letter.vx, letter.vy)
+        if (speed > maxSpeed) {
+          letter.vx = (letter.vx / speed) * maxSpeed
+          letter.vy = (letter.vy / speed) * maxSpeed
         }
         
         // Damping
-        letter.vx *= 0.94
-        letter.vy *= 0.94
+        letter.vx *= 0.95
+        letter.vy *= 0.95
         
         // Update position
         letter.x += letter.vx
@@ -642,9 +662,9 @@
       // Update physics first
       updateLetterTrail(ship, shipPos)
       
-      // Draw connecting lines (subtle, flowing)
-      ctx.strokeStyle = 'rgba(0, 255, 200, 0.25)'
-      ctx.lineWidth = 1.5
+      // Draw subtle connecting lines
+      ctx.strokeStyle = 'rgba(0, 255, 200, 0.2)'
+      ctx.lineWidth = 1
       ctx.beginPath()
       ctx.moveTo(shipPos.x, shipPos.y)
       for (const pos of letterTrailState.positions) {
@@ -667,11 +687,11 @@
         ctx.shadowColor = `hsl(${hue}, 80%, 50%)`
         ctx.shadowBlur = 8
         
-        // Slight rotation based on velocity
+        // Slight tilt based on velocity
         const angle = Math.atan2(pos.vy, pos.vx) + Math.PI / 2
         ctx.save()
         ctx.translate(pos.x, pos.y)
-        ctx.rotate(angle * 0.3)  // Subtle tilt
+        ctx.rotate(angle * 0.2)
         ctx.fillText(letter, 0, 0)
         ctx.restore()
       }
