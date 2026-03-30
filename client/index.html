@@ -292,6 +292,7 @@
     const asteroids = []
     const bullets = []
     const letterDrops = []
+    const depositedLetters = []  // Letters floating at base
     let gameActive = false
     let timeRemaining = 0
     let leaderboard = []
@@ -410,6 +411,12 @@
       if (data.letterDrops) {
         letterDrops.length = 0
         letterDrops.push(...data.letterDrops)
+      }
+      
+      // Update deposited letters at base
+      if (data.depositedLetters) {
+        depositedLetters.length = 0
+        depositedLetters.push(...data.depositedLetters)
       }
       
       // Debug: log bullet info
@@ -559,23 +566,46 @@
     }
 
     function renderLetterTrail(ship, shipPos) {
-      const trailSpacing = 25
-      const trailStartOffset = 40
+      if (!ship.collectedLetters || ship.collectedLetters.length === 0) return
+      
+      const trailSpacing = 20  // Distance between letters
+      const trailPositions = []
+      
+      // Calculate trail positions following ship path
+      let trailX = shipPos.x
+      let trailY = shipPos.y
+      let trailAngle = ship.angle + Math.PI / 2  // Ship facing direction
       
       for (let i = 0; i < ship.collectedLetters.length; i++) {
-        const letter = ship.collectedLetters[i]
-        const distanceBehind = trailStartOffset + i * trailSpacing
+        // Each letter follows behind the previous one
+        const distanceBehind = trailSpacing * (i + 1)
         
-        // Calculate position behind ship (opposite to ship angle)
-        const trailAngle = ship.angle + Math.PI / 2 + Math.PI // Behind ship
-        const trailX = shipPos.x + Math.cos(trailAngle) * distanceBehind
-        const trailY = shipPos.y + Math.sin(trailAngle) * distanceBehind
+        // Smooth curve behind ship using ship's angle
+        const letterAngle = trailAngle + Math.PI  // Opposite to ship
+        const letterX = shipPos.x + Math.cos(letterAngle) * Math.min(distanceBehind, 300)
+        const letterY = shipPos.y + Math.sin(letterAngle) * Math.min(distanceBehind, 300)
         
-        // Fade out older letters
-        const alpha = 1 - (i / ship.collectedLetters.length) * 0.5
+        trailPositions.push({ x: letterX, y: letterY, letter: ship.collectedLetters[i] })
+      }
+      
+      // Draw connecting lines (the "chain")
+      ctx.strokeStyle = 'rgba(0, 255, 200, 0.4)'
+      ctx.lineWidth = 2
+      ctx.beginPath()
+      if (trailPositions.length > 0) {
+        ctx.moveTo(shipPos.x, shipPos.y)
+        for (const pos of trailPositions) {
+          ctx.lineTo(pos.x, pos.y)
+        }
+      }
+      ctx.stroke()
+      
+      // Draw letters at their positions
+      for (let i = 0; i < trailPositions.length; i++) {
+        const pos = trailPositions[i]
+        const alpha = 1 - (i / trailPositions.length) * 0.5
+        const hue = (pos.letter.charCodeAt(0) * 17) % 360
         
-        // Color based on letter
-        const hue = (letter.charCodeAt(0) * 17) % 360
         ctx.globalAlpha = alpha
         ctx.fillStyle = `hsl(${hue}, 80%, 60%)`
         ctx.font = 'bold 18px "Courier New", monospace'
@@ -583,9 +613,12 @@
         ctx.textBaseline = 'middle'
         ctx.shadowColor = `hsl(${hue}, 80%, 50%)`
         ctx.shadowBlur = 8
-        ctx.fillText(letter, trailX, trailY)
-        ctx.shadowBlur = 0
+        
+        // Slight orbit/wave motion for organic feel
+        const waveOffset = Math.sin(Date.now() * 0.005 + i * 0.5) * 3
+        ctx.fillText(pos.letter, pos.x + waveOffset, pos.y)
       }
+      ctx.shadowBlur = 0
       ctx.globalAlpha = 1
     }
 
@@ -685,6 +718,40 @@
       ctx.globalAlpha = 1
     }
 
+    function renderDepositedLetters() {
+      for (const drop of depositedLetters) {
+        const pos = getWrappedScreenPos(drop.x, drop.y)
+        
+        // Cull if off screen
+        if (pos.x < -50 || pos.x > window.innerWidth + 50 || pos.y < -50 || pos.y > window.innerHeight + 50) continue
+
+        // Fade out near end of life (20 seconds = 1200 frames)
+        const lifeRatio = drop.life / 1200
+        if (lifeRatio < 0.2) {
+          ctx.globalAlpha = lifeRatio / 0.2
+        } else {
+          ctx.globalAlpha = 0.8
+        }
+
+        // Color based on letter (vibrant, readable)
+        const hue = (drop.letter.charCodeAt(0) * 17) % 360
+        ctx.fillStyle = `hsl(${hue}, 80%, 60%)`
+        ctx.font = 'bold 18px "Courier New", monospace'
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        
+        // Glow for visibility
+        ctx.shadowColor = `hsl(${hue}, 80%, 50%)`
+        ctx.shadowBlur = 8
+        
+        // Slight floating motion
+        const floatOffset = Math.sin(Date.now() * 0.003 + drop.life) * 4
+        ctx.fillText(drop.letter, pos.x, pos.y + floatOffset)
+      }
+      ctx.shadowBlur = 0
+      ctx.globalAlpha = 1
+    }
+
     function renderRadar() {
       const size = 180, centerX = size / 2, centerY = size / 2
       const scale = size / WORLD_SIZE  // Full world view
@@ -751,22 +818,21 @@
         radarCtx.restore()
       }
       
-      // Home base (green circle at center of world)
-      const basePos = getWrappedScreenPos(BASE_POSITION.x, BASE_POSITION.y)
-      const baseX = centerX + basePos.x * scale
-      const baseY = centerY + basePos.y * scale
-      if (baseX > 0 && baseX < size && baseY > 0 && baseY < size) {
-        // Base zone on radar
-        radarCtx.fillStyle = 'rgba(0, 255, 136, 0.3)'
-        radarCtx.beginPath()
-        radarCtx.arc(baseX, baseY, 8, 0, Math.PI * 2)  // Fixed size on radar
-        radarCtx.fill()
-        radarCtx.strokeStyle = '#0f8'
-        radarCtx.lineWidth = 1
-        radarCtx.beginPath()
-        radarCtx.arc(baseX, baseY, 6, 0, Math.PI * 2)
-        radarCtx.stroke()
-      }
+      // Home base (green circle at center of world) - position relative to player
+      const baseRelX = BASE_POSITION.x - localShip.x
+      const baseRelY = BASE_POSITION.y - localShip.y
+      const baseX = centerX + baseRelX * scale
+      const baseY = centerY + baseRelY * scale
+      // Always show base on radar (it's a fixed point of reference)
+      radarCtx.fillStyle = 'rgba(0, 255, 136, 0.3)'
+      radarCtx.beginPath()
+      radarCtx.arc(baseX, baseY, 8, 0, Math.PI * 2)  // Fixed size on radar
+      radarCtx.fill()
+      radarCtx.strokeStyle = '#0f8'
+      radarCtx.lineWidth = 1
+      radarCtx.beginPath()
+      radarCtx.arc(baseX, baseY, 6, 0, Math.PI * 2)
+      radarCtx.stroke()
     }
 
     function renderHUD() {
@@ -827,6 +893,9 @@
       
       // Render letter drops
       for (const drop of letterDrops) renderLetterDrop(drop)
+      
+      // Render deposited letters at base (floating)
+      renderDepositedLetters()
       
       // Render base
       renderBase()

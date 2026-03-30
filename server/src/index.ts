@@ -68,6 +68,7 @@ const players = new Map<string, Player>()
 const asteroids: AsteroidState[] = []
 const bullets: BulletState[] = []
 const letterDrops: LetterDrop[] = []
+const depositedLetters: { letter: string, x: number, y: number, vx: number, vy: number, life: number }[] = []  // Letters at base
 let gameStateSeq = 0
 
 let gameMode: GameModeConfig = {
@@ -278,8 +279,28 @@ function checkBaseDeposit(player: Player) {
     // Player is at base - deposit letters
     const deposited = ship.collectedLetters.length
     ship.score += deposited * 5  // Bonus for depositing
+    
+    // Add letters to floating deposit pool
+    for (const letter of ship.collectedLetters) {
+      const angle = Math.random() * Math.PI * 2
+      const speed = 0.5 + Math.random() * 1
+      depositedLetters.push({
+        letter,
+        x: BASE_POSITION.x + Math.cos(angle) * BASE_RADIUS * 0.5,
+        y: BASE_POSITION.y + Math.sin(angle) * BASE_RADIUS * 0.5,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life: 1200,  // 20 seconds
+      })
+    }
+    
     console.log(`[BASE] ${player.name} deposited ${deposited} letters: ${ship.collectedLetters.join('')}`)
     ship.collectedLetters = []  // Clear collected letters
+    
+    // Limit deposited letters (prevent memory growth)
+    while (depositedLetters.length > 100) {
+      depositedLetters.shift()
+    }
   }
 }
 
@@ -361,6 +382,7 @@ function broadcastState() {
     asteroids,
     bullets,
     letterDrops: letterDrops.filter(d => !d.collected), // Only send uncollected
+    depositedLetters,  // Letters floating at base
     gameActive,
     timeRemaining: gameActive ? Math.max(0, gameMode.duration - (Date.now() - gameStartTime)) : 0,
   }
@@ -745,6 +767,28 @@ function updatePhysics() {
     // Remove if expired or collected
     if (drop.life <= 0 || drop.collected) {
       letterDrops.splice(i, 1)
+    }
+  }
+
+  // Update deposited letters at base (float around base)
+  for (let i = depositedLetters.length - 1; i >= 0; i--) {
+    const letter = depositedLetters[i]!
+    letter.x += letter.vx
+    letter.y += letter.vy
+    
+    // Gentle drift toward base center
+    const dx = BASE_POSITION.x - letter.x
+    const dy = BASE_POSITION.y - letter.y
+    letter.vx += dx * 0.0001
+    letter.vy += dy * 0.0001
+    
+    // Damping
+    letter.vx *= 0.99
+    letter.vy *= 0.99
+    
+    letter.life--
+    if (letter.life <= 0) {
+      depositedLetters.splice(i, 1)
     }
   }
 
